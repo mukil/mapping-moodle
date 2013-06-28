@@ -1,0 +1,34 @@
+/** @author: mukil */
+
+ul.moodle-items {
+    padding-left: 0px;
+    margin-right: 20px;
+    list-style-type: none;
+}
+
+li.moodle-item {
+    color: #333;
+    border: 1px solid #000;
+    margin: 2px;
+    padding: 5px;
+    padding-top: 3px;
+    cursor: pointer;
+    border: 1px solid #fff;
+}
+
+li.moodle-item img {
+    padding-right: 10px;
+    position: relative;
+    top: 5px;
+}
+
+li.moodle-item small {
+
+}
+
+div.moodle-course-update {
+    margin-left: auto;
+    margin-right: auto;
+    position: relative;
+    top: 10px;
+}
