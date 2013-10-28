@@ -21,17 +21,17 @@ public class Migration2 extends Migration {
     // private String FILE_URI = "dm4.files.file";
 
     private String WS_DEFAULT_URI = "de.workspaces.deepamehta";
-    private String DEEPAMEHTA_USER_URI = "dm4.accesscontrol.user_account";
+    private String DEEPAMEHTA_USER_TYPE_URI = "dm4.accesscontrol.user_account";
 
     @Override
     public void run() {
 
-        TopicType user = dms.getTopicType(DEEPAMEHTA_USER_URI, null);
+        TopicType user = dms.getTopicType(DEEPAMEHTA_USER_TYPE_URI, null);
 
         // 1) Enrich the "User"-Type about a "Moodle Security Token" and "Moodle User ID"
-        user.addAssocDef(new AssociationDefinitionModel("dm4.core.composition_def", DEEPAMEHTA_USER_URI,
+        user.addAssocDef(new AssociationDefinitionModel("dm4.core.composition_def", DEEPAMEHTA_USER_TYPE_URI,
                 MOODLE_SECURITY_KEY_URI, "dm4.core.one", "dm4.core.one"));
-        user.addAssocDef(new AssociationDefinitionModel("dm4.core.composition_def", DEEPAMEHTA_USER_URI,
+        user.addAssocDef(new AssociationDefinitionModel("dm4.core.composition_def", DEEPAMEHTA_USER_TYPE_URI,
                 MOODLE_USER_ID_URI, "dm4.core.one", "dm4.core.one"));
 
         // 2) Assign new type "Moodle Security Token" to our default workspace

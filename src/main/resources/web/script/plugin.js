@@ -55,6 +55,33 @@
                 + 'Shaking hands with moodle ... </div>')
         }
 
+        function getMoodleFile () {
+            var requestUri = '/moodle/file/' + dm4c.selected_object.id
+
+            var response_data_type = response_data_type || "json"
+            //
+            $.ajax({
+                type: "GET", url: requestUri,
+                dataType: response_data_type, processData: false,
+                async: true,
+                success: function(data, text_status, jq_xhr) {
+                    // dm4c.do_select_topic(data.id, true)
+                    console.log(data)
+                },
+                error: function(jq_xhr, text_status, error_thrown) {
+                    dm4c.page_panel.refresh()
+                    throw "RESTClientError: GET request failed (" + text_status + ": " + error_thrown + " - Hint: "
+                        + " Most probably this user has not set a security key / token yet."
+                },
+                complete: function(jq_xhr, text_status) {
+                    var status = text_status
+                }
+            })
+
+            $('#page-content').html('<div class="field-label moodle-course-update">'
+                + 'Reading file ...</div>')
+        }
+
         function getMyCourses () {
             var requestUri = '/moodle/courses'
 
@@ -106,6 +133,18 @@
                     handler: getMyCourses,
                     context: ['context-menu', 'detail-panel-show']
                 })
+            } else if (topic.type_uri === 'org.deepamehta.moodle.item') {
+                if (topic.composite.hasOwnProperty('org.deepamehta.moodle.item_type')) {
+                    var type_of = topic.composite['org.deepamehta.moodle.item_type'].value
+                    if (type_of === "file") {
+                        commands.push({is_separator: true, context: 'context-menu'})
+                        commands.push({
+                            label: 'Read on',
+                            handler: getMoodleFile,
+                            context: ['context-menu', 'detail-panel-show']
+                        })
+                    }
+                }
             }
             return commands
         })
