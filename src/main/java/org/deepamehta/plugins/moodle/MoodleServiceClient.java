@@ -12,6 +12,7 @@ import de.deepamehta.core.service.Directives;
 import de.deepamehta.core.service.PluginService;
 import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
+import de.deepamehta.core.util.JavaUtils;
 import de.deepamehta.plugins.accesscontrol.model.ACLEntry;
 import de.deepamehta.plugins.accesscontrol.model.AccessControlList;
 import de.deepamehta.plugins.accesscontrol.model.Operation;
@@ -28,6 +29,7 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
+import javax.ws.rs.core.Response;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
@@ -69,13 +71,17 @@ public class MoodleServiceClient extends PluginActivator {
     private String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
     private String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
 
-    private String MOODLE_FILE_URI = "org.deepamehta.moodle.file";
-    private String MOODLE_FILE_NAME_URI = "org.deepamehta.moodle.file_name";
-    private String MOODLE_FILE_PATH_URI = "org.deepamehta.moodle.file_path";
-    private String MOODLE_FILE_URL_URI = "org.deepamehta.moodle.file_url";
-    private String MOODLE_FILE_SIZE_URI = "org.deepamehta.moodle.file_size";
+    private String MOODLE_FILE_URL_URI = "org.deepamehta.moodle.fileurl";
+
+    private String DEEPAMEHTA_FILE_URI = "dm4.files.file";
+    private String DEEPAMEHTA_FILE_NAME_URI = "dm4.files.file_name";
+    private String DEEPAMEHTA_FILE_CONTENT_URI = "dm4.files.file_content";
+    private String DEEPAMEHTA_FILE_PATH_URI = "dm4.files.path";
+    private String DEEPAMEHTA_FILE_TYPE_URI = "dm4.files.media_type";
+    private String DEEPAMEHTA_FILE_SIZE_URI = "dm4.files.size";
 
     private String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
+    private String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
 
     private String MOODLE_SERVICE_NAME = "eduzen_web_service";
     private String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
@@ -90,11 +96,11 @@ public class MoodleServiceClient extends PluginActivator {
     public void postInstall() {
         if (aclService != null) { // panic check (allPluginsMustBeActive)
             Topic serviceEndpointUri = getMoodleServiceUrl();
-            aclService.setCreator(serviceEndpointUri.getId(), "Malte");
-            aclService.setOwner(serviceEndpointUri.getId(), "Malte");
+            aclService.setCreator(serviceEndpointUri, "Malte");
+            aclService.setOwner(serviceEndpointUri, "Malte");
             AccessControlList aclist = new AccessControlList()
                     .addEntry(new ACLEntry(Operation.WRITE, UserRole.CREATOR));
-            aclService.setACL(serviceEndpointUri.getId(), aclist);
+            aclService.setACL(serviceEndpointUri, aclist);
         }
     }
 
@@ -113,10 +119,10 @@ public class MoodleServiceClient extends PluginActivator {
     @Produces("application/json")
     public Topic getMyMoodleCourses(@HeaderParam("Cookie") ClientState clientState) {
 
+        // A 401 WebApplicationException thrown in private does turn into a 500
         Topic userAccount = checkAuthorization();
         String token = getMoodleSecurityKey(userAccount);
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-
         long userId = getMoodleUserId(userAccount); // fixme: how to get the current userId
         if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
 
@@ -223,8 +229,40 @@ public class MoodleServiceClient extends PluginActivator {
     }
 
     @GET
+    @Path("/file/{itemTopicId}")
+    @Produces("application/json")
+    public String getMoodleFile(@PathParam("itemTopicId") int itemId) {
+
+        Topic userAccount = checkAuthorization();
+        String token = getMoodleSecurityKey(userAccount);
+        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
+
+        long userId = getMoodleUserId(userAccount); // fixme: how to get the current userId
+        if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
+
+        Topic moodleItem = dms.getTopic(itemId, true, null);
+        // String moodleItemId = getParentMoodleItemId(moodleFile);
+        Topic moodleFile = getMoodleFileTopic(moodleItem);
+        String result = "";
+        if (moodleFile != null) {
+            // fixme: create "File"-Topic and drop "Moodle File" Item
+            // and use: String mediaType = JavaUtils.getFileType(file.getName()) to leverage file-display
+            // String filePath = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_PATH_URI);
+            /** String fileName = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_NAME_URI);
+            String fileUrl = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_URL_URI);
+            String localFilePath = filerepoPath;
+            result = callMoodleFile(fileUrl, token, fileName, localFilePath); // store file temporarily
+            log.info("Debug File Response Data => " + result); **/
+        } else {
+            log.warning("Could not fetch moodlefile-topic from Item => " + moodleItem.getId());
+        }
+        return result;
+    }
+
+    /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
+    @GET
     @Path("/user")
-    public Topic setMoodleUserId(@HeaderParam("Cookie") ClientState clientState) throws WebApplicationException {
+    public Topic setMoodleUserId() throws WebApplicationException {
 
         Topic userAccount = checkAuthorization();
         String token = getMoodleSecurityKey(userAccount);
@@ -248,48 +286,29 @@ public class MoodleServiceClient extends PluginActivator {
         return userAccount;
     }
 
-    @GET
-    @Path("/file/{itemTopicId}")
-    @Produces("application/json")
-    public String getMoodleFile(@PathParam("itemTopicId") int itemId) {
-
-        Topic userAccount = checkAuthorization();
-        String token = getMoodleSecurityKey(userAccount);
-        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-
-        long userId = getMoodleUserId(userAccount); // fixme: how to get the current userId
-        if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
-
-        Topic moodleItem = dms.getTopic(itemId, true, null);
-        // String moodleItemId = getParentMoodleItemId(moodleFile);
-        Topic moodleFile = getMoodleFileTopic(moodleItem);
-        String result = "";
-        if (moodleFile != null) {
-            // fixme: create "File"-Topic and drop "Moodle File" Item
-            // and use: String mediaType = JavaUtils.getFileType(file.getName()) to leverage file-display
-            // String filePath = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_PATH_URI);
-            String fileName = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_NAME_URI);
-            String fileUrl = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_URL_URI);
-            String localFilePath = filerepoPath;
-            result = callMoodleFile(fileUrl, token, fileName, localFilePath); // store file temporarily
-            log.info("Debug File Response Data => " + result);
-        } else {
-            log.warning("Could not fetch moodlefile-topic from Item => " + moodleItem.getId());
-        }
-        return result;
-    }
-
+    /** Relates the moodle-security-key to our currently logged-in user-account. **/
     @POST
-    @Path("/set/key/{userId}")
+    @Path("/set/key/{id}")
+    @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
-    public String setMoodleKey(@PathParam("userId") int userId) {
-
+    public String setMoodleSecurityKey(@PathParam("id") int id, final String input ) {
+        DeepaMehtaTransaction tx = dms.beginTx();
+        try {
             Topic userAccount = checkAuthorization();
-            if (userAccount.getId() != userId) throw new WebApplicationException(new RuntimeException("Get a job."), 401);
-        	/** Topic user = ;
-            String isisKey = "...";
-            user.setProperty(MOODLE_SECURITY_KEY_URI, isisKey, false);		// addToIndex=false **/
-            return "";
+            if (userAccount.getId() != id) throw new WebApplicationException(new RuntimeException("Get a job."), 401);
+            Topic user = dms.getTopic(id, true, null);
+            JSONObject payload = new JSONObject(input);
+            String moodle_key = payload.getString("moodle_key");
+            user.setProperty(MOODLE_SECURITY_KEY_URI, moodle_key, false);		// addToIndex=false **/
+            tx.success();
+            return "{ \"result\": \"OK\"}";
+        } catch (JSONException ex) {
+            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+            tx.failure();
+            throw new WebApplicationException(new Throwable("Problem inspecting your payload."), 500);
+        } finally {
+            tx.finish();
+        }
     }
 
     // ---
@@ -403,7 +422,7 @@ public class MoodleServiceClient extends PluginActivator {
 
     private Topic getMoodleFileTopic (Topic item) {
         return item.getRelatedTopic(AGGREGATION_TYPE_URI, PARENT_ROLE_TYPE_URI,
-                CHILD_ROLE_TYPE_URI, MOODLE_FILE_URI, true, true, null);
+                CHILD_ROLE_TYPE_URI, DEEPAMEHTA_FILE_URI, true, true, null);
     }
 
     private void createParticipantEdge(Topic courseTopic, Topic userAccount, ClientState clientState) {
@@ -514,7 +533,7 @@ public class MoodleServiceClient extends PluginActivator {
                         // add it to the (to be created) Moodle Item
                         model.putRef(WEB_RESOURCE_TYPE_URI, webResource.getId());
                         model.put(MOODLE_ITEM_TYPE_URI, resourceType);
-                        if (resource.has("timemodified")) {
+                        if (resource.has("timemodified") && !resource.isNull("timemodified")) {
                             last_modified = resource.getLong("timemodified");
                         }
                         // urls timestamps (modified, created) are often null
@@ -523,12 +542,12 @@ public class MoodleServiceClient extends PluginActivator {
                     } else if (resourceType.equals("file")) { // Moodle Resource is an URL
                         // pages _and_ documents are of type file
                         // todo: existence check of file-item by, e.g. fileurl? (no id is present)
-                        Topic moodleFile = createMoodleFileTopic(resource, clientState);
+                        Topic dmFile = createMoodleFileTopic(resource, clientState);
                         // add it to the (to be created) Moodle Item
-                        model.putRef(MOODLE_FILE_URI, moodleFile.getId());
+                        model.putRef(DEEPAMEHTA_FILE_URI, dmFile.getId());
                         model.put(MOODLE_ITEM_TYPE_URI, resourceType);
                         // we use "timemodified" (if not null) instead of "timecreated"
-                        if (resource.has("timemodified")) {
+                        if (resource.has("timemodified") && !resource.isNull("timemodified")) {
                             last_modified = resource.getLong("timemodified");
                         }
                         model.put(MOODLE_ITEM_MODIFIED_URI, last_modified);
@@ -563,13 +582,15 @@ public class MoodleServiceClient extends PluginActivator {
             filesize = content.getLong("filesize");
             // we currently skip "userid", "sortorder", "author", "license"
             // put values into child topics.. here and then create the topicmodel
-            fileComposite.put(MOODLE_FILE_NAME_URI, filename);
-            fileComposite.put(MOODLE_FILE_PATH_URI, filepath);
+            String mediaType = JavaUtils.getFileType(filename);
+            fileComposite.put(DEEPAMEHTA_FILE_NAME_URI, filename);
+            fileComposite.put(DEEPAMEHTA_FILE_PATH_URI, filepath);
+            fileComposite.put(DEEPAMEHTA_FILE_TYPE_URI, mediaType);
             fileComposite.put(MOODLE_FILE_URL_URI, fileurl); // get?
-            fileComposite.put(MOODLE_FILE_SIZE_URI, filesize);
-            TopicModel fileModel = new TopicModel(MOODLE_FILE_URI, fileComposite);
+            fileComposite.put(DEEPAMEHTA_FILE_SIZE_URI, filesize);
+            TopicModel fileModel = new TopicModel(DEEPAMEHTA_FILE_URI, fileComposite);
             Topic moodleFile = dms.createTopic(fileModel, clientState);
-            log.info("CREATED Moodle FILE => " + moodleFile.toJSON().toString());
+            log.info("CREATED DeepaMehta FILE => " + moodleFile.toJSON().toString());
             bx.success();
             return moodleFile;
         } catch (JSONException ex) {
@@ -590,35 +611,30 @@ public class MoodleServiceClient extends PluginActivator {
         return accountTopic;
     }
 
-    /** fixme: treat this as a secret */
     private String getMoodleSecurityKey(Topic userAccount) {
-        String token = null;
-        CompositeValueModel userModel = userAccount.getModel().getCompositeValueModel();
-        if (userModel.has(MOODLE_SECURITY_KEY_URI)) {
-            token = userModel.getString(MOODLE_SECURITY_KEY_URI);
+        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
+            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
+            return token;
         }
-        return token;
+        return null;
     }
 
     private long getMoodleUserId(Topic userAccount) {
-        long id = -1;
-        CompositeValueModel userModel = userAccount.getModel().getCompositeValueModel();
-        if (userModel.has("org.deepamehta.moodle.user_id")) {
-            id = userModel.getLong("org.deepamehta.moodle.user_id");
+        if (userAccount.hasProperty(MOODLE_USER_ID_URI)) {
+            String id = (String) userAccount.getProperty(MOODLE_USER_ID_URI);
+            long moodle_user_id = Long.parseLong(id);
+            log.info("Getting Moodle User-ID " + moodle_user_id);
+            return moodle_user_id;
         }
-        return id;
+        return -1;
     }
 
-    private boolean setMoodleUserId(Topic userAccount, long userId) {
-        CompositeValueModel userModel = userAccount.getCompositeValue().getModel();
-        userModel.put("org.deepamehta.moodle.user_id", userId);
-        userAccount.setCompositeValue(userModel, null, new Directives());
-        CompositeValue composite = userAccount.getCompositeValue();
-        if (composite.has("org.deepamehta.moodle.user_id") &&
-            composite.getLong("org.deepamehta.moodle.user_id") == userId) {
-            return true;
-        }
-        return false;
+    private boolean setMoodleUserId(Topic userAccount, long moodleUserId) {
+        DeepaMehtaTransaction tx = dms.beginTx();
+        userAccount.setProperty(MOODLE_USER_ID_URI, "" + moodleUserId + "", false);
+        tx.success();
+        tx.finish();
+        return true;
     }
 
     private Topic getMoodleServiceUrl() {
@@ -627,7 +643,7 @@ public class MoodleServiceClient extends PluginActivator {
 
     private Topic checkAuthorization() throws WebApplicationException {
         String username = aclService.getUsername();
-        if (username == null) throw new WebApplicationException(new RuntimeException("Please log in first."), 500);
+        if (username == null) throw new WebApplicationException(401);
         return getUserAccountTopic(username);
     }
 
