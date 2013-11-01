@@ -1,18 +1,15 @@
 package org.deepamehta.plugins.moodle;
 
 import de.deepamehta.core.Association;
-import de.deepamehta.core.CompositeValue;
-import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
-
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.model.*;
 import de.deepamehta.core.osgi.PluginActivator;
 import de.deepamehta.core.service.ClientState;
-import de.deepamehta.core.service.Directives;
 import de.deepamehta.core.service.PluginService;
 import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
+import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
 import de.deepamehta.plugins.accesscontrol.model.ACLEntry;
 import de.deepamehta.plugins.accesscontrol.model.AccessControlList;
 import de.deepamehta.plugins.accesscontrol.model.Operation;
@@ -63,6 +60,8 @@ public class MoodleServiceClient extends PluginActivator {
     private String MOODLE_ITEM_URI = "org.deepamehta.moodle.item";
     private String MOODLE_ITEM_NAME_URI = "org.deepamehta.moodle.item_name";
     private String MOODLE_ITEM_ICON_URI = "org.deepamehta.moodle.item_icon";
+    private String MOODLE_ITEM_REMOTE_URL_URI = "org.deepamehta.moodle.item_url";
+    private String MOODLE_ITEM_MEDIA_TYPE_URI = "org.deepamehta.moodle.item_media_type";
     private String MOODLE_ITEM_DESC_URI = "org.deepamehta.moodle.item_description";
     private String MOODLE_ITEM_HREF_URI = "org.deepamehta.moodle.item_href";
     private String MOODLE_ITEM_TYPE_URI = "org.deepamehta.moodle.item_type";
@@ -70,15 +69,7 @@ public class MoodleServiceClient extends PluginActivator {
     private String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
     private String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
     private String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
-
-    private String MOODLE_FILE_URL_URI = "org.deepamehta.moodle.fileurl";
-
-    private String DEEPAMEHTA_FILE_URI = "dm4.files.file";
-    private String DEEPAMEHTA_FILE_NAME_URI = "dm4.files.file_name";
-    private String DEEPAMEHTA_FILE_CONTENT_URI = "dm4.files.file_content";
-    private String DEEPAMEHTA_FILE_PATH_URI = "dm4.files.path";
-    private String DEEPAMEHTA_FILE_TYPE_URI = "dm4.files.media_type";
-    private String DEEPAMEHTA_FILE_SIZE_URI = "dm4.files.size";
+    private String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
 
     private String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
     private String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
@@ -228,37 +219,6 @@ public class MoodleServiceClient extends PluginActivator {
         return courseTopic;
     }
 
-    @GET
-    @Path("/file/{itemTopicId}")
-    @Produces("application/json")
-    public String getMoodleFile(@PathParam("itemTopicId") int itemId) {
-
-        Topic userAccount = checkAuthorization();
-        String token = getMoodleSecurityKey(userAccount);
-        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-
-        long userId = getMoodleUserId(userAccount); // fixme: how to get the current userId
-        if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
-
-        Topic moodleItem = dms.getTopic(itemId, true, null);
-        // String moodleItemId = getParentMoodleItemId(moodleFile);
-        Topic moodleFile = getMoodleFileTopic(moodleItem);
-        String result = "";
-        if (moodleFile != null) {
-            // fixme: create "File"-Topic and drop "Moodle File" Item
-            // and use: String mediaType = JavaUtils.getFileType(file.getName()) to leverage file-display
-            // String filePath = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_PATH_URI);
-            /** String fileName = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_NAME_URI);
-            String fileUrl = moodleFile.getModel().getCompositeValueModel().getString(MOODLE_FILE_URL_URI);
-            String localFilePath = filerepoPath;
-            result = callMoodleFile(fileUrl, token, fileName, localFilePath); // store file temporarily
-            log.info("Debug File Response Data => " + result); **/
-        } else {
-            log.warning("Could not fetch moodlefile-topic from Item => " + moodleItem.getId());
-        }
-        return result;
-    }
-
     /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
     @GET
     @Path("/user")
@@ -311,6 +271,18 @@ public class MoodleServiceClient extends PluginActivator {
         }
     }
 
+    @GET
+    @Path("/get/key")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String getMoodleSecurityKey() {
+        Topic userAccount = checkAuthorization();
+        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
+            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
+            return token;
+        }
+        return null;
+    }
+
     // ---
 
     @Override
@@ -361,33 +333,6 @@ public class MoodleServiceClient extends PluginActivator {
         }
     }
 
-    private String callMoodleFile (String fileUrl, String token, String fileName, String filePath) {
-
-        String queryUrl = fileUrl + "&token=" + token;
-        log.info("MOODLE File Query URL => " + queryUrl);
-        try {
-            HttpURLConnection con = (HttpURLConnection) new URL(queryUrl).openConnection();
-            con.setRequestMethod("GET");
-            con.setDoOutput(false);
-            con.setUseCaches (false);
-            con.setDoInput(true);
-
-            //Get Response
-            InputStream is = con.getInputStream();
-            OutputStream outputStream = new FileOutputStream(new File(filePath + fileName));
-
-            int read = 0;
-            byte[] bytes = new byte[1024];
-            while ((read = is.read(bytes)) != -1) {
-                outputStream.write(bytes, 0, read);
-            }
-            log.info("Done! Wrote File " + filePath + fileName);
-            return "OK";
-        } catch (Exception ex) {
-            throw new WebApplicationException(new RuntimeException(ex.getCause()), 500);
-        }
-    }
-
     private boolean hasParticipantEdge (Topic course, Topic user) {
         boolean value = false;
         Topic userAccount = course.getRelatedTopic(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
@@ -419,11 +364,6 @@ public class MoodleServiceClient extends PluginActivator {
         id = (topic != null) ? topic.getUri().substring(ISIS_ITEM_URI_PREFIX.length()) : "0";
         return id;
     } **/
-
-    private Topic getMoodleFileTopic (Topic item) {
-        return item.getRelatedTopic(AGGREGATION_TYPE_URI, PARENT_ROLE_TYPE_URI,
-                CHILD_ROLE_TYPE_URI, DEEPAMEHTA_FILE_URI, true, true, null);
-    }
 
     private void createParticipantEdge(Topic courseTopic, Topic userAccount, ClientState clientState) {
         AssociationModel participantEdge = new AssociationModel(MOODLE_PARTICIPANT_EDGE,
@@ -513,25 +453,20 @@ public class MoodleServiceClient extends PluginActivator {
             JSONArray contents = null;
             if (object.has("contents")) {
                 contents = object.getJSONArray("contents");
+                // fixme: per Moodle Item we currently can have just 1 FILE resp. URL // the last one takes it all //
                 for (int i = 0; i < contents.length(); i++) {
                     JSONObject resource = contents.getJSONObject(i);
                     /* = "", filename = "", filepath = "", fileurl = "",
                             userid = "", author = "", license = "";
                     long filesize = 0, timecreated = 0, timemodified = 0; */
                     String resourceType = resource.getString("type");
-                    String fileUrl = "";
+                    String fileUrl = "", fileName = "";
                     long last_modified = 0;
                     if (resourceType.equals("url")) { // Moodle Resource is an URL
                         fileUrl = resource.getString("fileurl");
-                        CompositeValueModel webModel = new CompositeValueModel();
-                        // parse youtube and replace /watch?v=id with /embed/id in the url
-                        // fixme: existence check of Web Resource by URL
-                        webModel.put("dm4.webbrowser.url", fileUrl);
-                        webModel.put("dm4.webbrowser.web_resource_description", "");
-                        TopicModel web = new TopicModel(WEB_RESOURCE_TYPE_URI, webModel);
-                        Topic webResource = dms.createTopic(web, clientState);
+                        // ### parse youtube and replace /watch?v=id with /embed/id in the url
+                        model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
                         // add it to the (to be created) Moodle Item
-                        model.putRef(WEB_RESOURCE_TYPE_URI, webResource.getId());
                         model.put(MOODLE_ITEM_TYPE_URI, resourceType);
                         if (resource.has("timemodified") && !resource.isNull("timemodified")) {
                             last_modified = resource.getLong("timemodified");
@@ -541,10 +476,17 @@ public class MoodleServiceClient extends PluginActivator {
                         // alternatively: model.put(MOODLE_ITEM_HREF_URI, fileurl);
                     } else if (resourceType.equals("file")) { // Moodle Resource is an URL
                         // pages _and_ documents are of type file
+                        fileName = resource.getString("filename");
+                        fileUrl = resource.getString("fileurl");
+                        long fileSize = resource.getLong("filesize");
                         // todo: existence check of file-item by, e.g. fileurl? (no id is present)
-                        Topic dmFile = createMoodleFileTopic(resource, clientState);
+                        // Topic dmFile = createMoodleFileTopic(resource, clientState);
                         // add it to the (to be created) Moodle Item
-                        model.putRef(DEEPAMEHTA_FILE_URI, dmFile.getId());
+                        // model.putRef(DEEPAMEHTA_FILE_URI, dmFile.getId());
+                        model.put(MOODLE_ITEM_NAME_URI, fileName);
+                        model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
+                        model.put(MOODLE_ITEM_SIZE_URI, fileSize);
+                        model.put(MOODLE_ITEM_MEDIA_TYPE_URI, JavaUtils.getFileType(fileName));
                         model.put(MOODLE_ITEM_TYPE_URI, resourceType);
                         // we use "timemodified" (if not null) instead of "timecreated"
                         if (resource.has("timemodified") && !resource.isNull("timemodified")) {
@@ -568,40 +510,6 @@ public class MoodleServiceClient extends PluginActivator {
         }
         return null;
     }
-
-    private Topic createMoodleFileTopic(JSONObject content, ClientState clientState) {
-        DeepaMehtaTransaction bx = dms.beginTx();
-        String resourceType = "", filename = "", filepath = "", fileurl = "",
-            userid = "", author = "", license = "";
-        long filesize = 0, timecreated = 0, timemodified = 0;
-        try {
-            CompositeValueModel fileComposite = new CompositeValueModel();
-            filename = content.getString("filename");
-            fileurl = content.getString("fileurl");
-            filepath = content.getString("filepath");
-            filesize = content.getLong("filesize");
-            // we currently skip "userid", "sortorder", "author", "license"
-            // put values into child topics.. here and then create the topicmodel
-            String mediaType = JavaUtils.getFileType(filename);
-            fileComposite.put(DEEPAMEHTA_FILE_NAME_URI, filename);
-            fileComposite.put(DEEPAMEHTA_FILE_PATH_URI, filepath);
-            fileComposite.put(DEEPAMEHTA_FILE_TYPE_URI, mediaType);
-            fileComposite.put(MOODLE_FILE_URL_URI, fileurl); // get?
-            fileComposite.put(DEEPAMEHTA_FILE_SIZE_URI, filesize);
-            TopicModel fileModel = new TopicModel(DEEPAMEHTA_FILE_URI, fileComposite);
-            Topic moodleFile = dms.createTopic(fileModel, clientState);
-            log.info("CREATED DeepaMehta FILE => " + moodleFile.toJSON().toString());
-            bx.success();
-            return moodleFile;
-        } catch (JSONException ex) {
-            bx.failure();
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
-        } finally {
-            bx.finish();
-        }
-        return null;
-    }
-
 
     private Topic getUserAccountTopic(String username) {
         Topic accountTopic = null;

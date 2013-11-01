@@ -12,9 +12,6 @@ public class Migration2 extends Migration {
 
     private String MOODLE_CONFIG = "org.deepamehta.moodle.web_service_url";
     private String MOODLE_ITEM = "org.deepamehta.moodle.item";
-    private String DEEPAMEHTA_FILE_ITEM = "dm4.files.file";
-    private String MOODLE_FILE_URL = "org.deepamehta.moodle.fileurl";
-
     private String WS_DEFAULT_URI = "de.workspaces.deepamehta";
 
     @Override
@@ -28,10 +25,6 @@ public class Migration2 extends Migration {
         TopicType moodleItem = dms.getTopicType(MOODLE_ITEM, null);
         assignWorkspace(moodleItem);
 
-        // 3) Assign moodle file extension to type \"File\"
-        TopicType fileType = dms.getTopicType(DEEPAMEHTA_FILE_ITEM, null);
-        fileType.addAssocDef(new AssociationDefinitionModel("dm4.core.composition_def", DEEPAMEHTA_FILE_ITEM,
-                MOODLE_FILE_URL, "dm4.core.one", "dm4.core.one"));
         // moodleItem.getViewConfig().addSetting("dm4.core.view_configuration", "dm4.core.locked", true);
 
     }

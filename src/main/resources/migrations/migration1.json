@@ -1,8 +1,38 @@
 {
     "topic_types": [
         {
-            "value": "Moodle File URL",
-            "uri": "org.deepamehta.moodle.fileurl",
+            "value": "Moodle Item URL",
+            "uri": "org.deepamehta.moodle.item_url",
+            "data_type_uri": "dm4.core.text",
+            "view_config_topics": [
+                {
+                    "type_uri": "dm4.webclient.view_config",
+                    "composite": {
+                        "dm4.webclient.show_in_create_menu": false,
+                        "dm4.webclient.searchable_as_unit": false,
+                        "dm4.webclient.rows": 1
+                    }
+                }
+            ]
+        },
+        {
+            "value": "Moodle Item Size",
+            "uri": "org.deepamehta.moodle.item_size",
+            "data_type_uri": "dm4.core.text",
+            "view_config_topics": [
+                {
+                    "type_uri": "dm4.webclient.view_config",
+                    "composite": {
+                        "dm4.webclient.show_in_create_menu": false,
+                        "dm4.webclient.searchable_as_unit": false,
+                        "dm4.webclient.rows": 1
+                    }
+                }
+            ]
+        },
+        {
+            "value": "Moodle Item Media Type",
+            "uri": "org.deepamehta.moodle.item_media_type",
             "data_type_uri": "dm4.core.text",
             "view_config_topics": [
                 {
@@ -164,7 +194,6 @@
                 }
             ]
         },
-        ### modname, filename, filepath, filesize, timemodified, timecreated
         {
             "value": "Moodle Item", ### org.deepamehta.resources.resource
             "uri": "org.deepamehta.moodle.item",
@@ -177,6 +206,24 @@
                 },
                 {
                     "child_type_uri": "org.deepamehta.moodle.item_icon",
+                    "child_cardinality_uri": "dm4.core.one",
+                    "assoc_type_uri": "dm4.core.composition_def"
+                },
+                {
+                    "child_type_uri": "org.deepamehta.moodle.item_type",
+                    "parent_cardinality_uri": "dm4.core.one",
+                    "child_cardinality_uri": "dm4.core.one",
+                    "assoc_type_uri": "dm4.core.composition_def"
+                },
+                {
+                    "child_type_uri": "org.deepamehta.moodle.item_media_type",
+                    "parent_cardinality_uri": "dm4.core.one",
+                    "child_cardinality_uri": "dm4.core.one",
+                    "assoc_type_uri": "dm4.core.composition_def"
+                },
+                {
+                    "child_type_uri": "org.deepamehta.moodle.item_url",
+                    "parent_cardinality_uri": "dm4.core.one",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
@@ -214,22 +261,10 @@
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
                 {
-                    "child_type_uri": "org.deepamehta.moodle.item_type",
+                    "child_type_uri": "org.deepamehta.moodle.item_size",
                     "parent_cardinality_uri": "dm4.core.one",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.composition_def"
-                },
-                {
-                    "child_type_uri": "dm4.files.file",
-                    "parent_cardinality_uri": "dm4.core.one",
-                    "child_cardinality_uri": "dm4.core.one",
-                    "assoc_type_uri": "dm4.core.aggregation_def"
-                },
-                {
-                    "child_type_uri": "dm4.webbrowser.web_resource",
-                    "parent_cardinality_uri": "dm4.core.one",
-                    "child_cardinality_uri": "dm4.core.one",
-                    "assoc_type_uri": "dm4.core.aggregation_def"
                 },
                 {
                     "child_type_uri": "dm4.tags.tag",
@@ -246,7 +281,9 @@
                         "dm4.webclient.show_in_create_menu": false,
                         "dm4.webclient.searchable_as_unit": true,
                         "dm4.webclient.rows": 1,
-                        "dm4.webclient.multi_renderer_uri" : "org.deepamehta.moodle.item_multi_renderer"
+                        "dm4.webclient.multi_renderer_uri" : "org.deepamehta.moodle.item_multi_renderer",
+                        "dm4.webclient.page_renderer_uri" : "org.deepamehta.moodle.item_page_renderer"
+
                     }
                 }
             ]
