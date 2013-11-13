@@ -1,3 +1,4 @@
+
 dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
 
     render_info: function (page_models, $parent) {
@@ -37,7 +38,7 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                 }
             }
         }
-        $parent.append(list)
+        $parent.append('<div class="field-label">Moodle Items</div>').append(list)
 
     },
 

@@ -56,6 +56,7 @@ public class MoodleServiceClient extends PluginActivator {
     private String MOODLE_SECTION_URI = "org.deepamehta.moodle.section";
     private String MOODLE_SECTION_NAME_URI = "org.deepamehta.moodle.section_name";
     private String MOODLE_SECTION_SUMMARY_URI = "org.deepamehta.moodle.section_summary";
+    private String MOODLE_SECTION_ORDINAL_NR = "org.deepamehta.moodle.section_ordinal_nr";
 
     private String MOODLE_ITEM_URI = "org.deepamehta.moodle.item";
     private String MOODLE_ITEM_NAME_URI = "org.deepamehta.moodle.item_name";
@@ -87,8 +88,8 @@ public class MoodleServiceClient extends PluginActivator {
     public void postInstall() {
         if (aclService != null) { // panic check (allPluginsMustBeActive)
             Topic serviceEndpointUri = getMoodleServiceUrl();
-            aclService.setCreator(serviceEndpointUri, "Malte");
-            aclService.setOwner(serviceEndpointUri, "Malte");
+            aclService.setCreator(serviceEndpointUri, "admin");
+            aclService.setOwner(serviceEndpointUri, "admin");
             AccessControlList aclist = new AccessControlList()
                     .addEntry(new ACLEntry(Operation.WRITE, UserRole.CREATOR));
             aclService.setACL(serviceEndpointUri, aclist);
@@ -110,7 +111,7 @@ public class MoodleServiceClient extends PluginActivator {
     @Produces("application/json")
     public Topic getMyMoodleCourses(@HeaderParam("Cookie") ClientState clientState) {
 
-        // A 401 WebApplicationException thrown in private does turn into a 500
+        // A 401 WebApplicationException thrown in private does turn into a 500 (?)
         Topic userAccount = checkAuthorization();
         String token = getMoodleSecurityKey(userAccount);
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
@@ -128,7 +129,7 @@ public class MoodleServiceClient extends PluginActivator {
                 Topic courseTopic = getMoodleCourseTopic(course.getLong("id"));
                 if (courseTopic == null) {
                     courseTopic = createMoodleCourseTopic(course, clientState);
-                    // log.info("Created at new Course => \r\n " + courseTopic.toJSON().toString());
+                    log.info("Created at new MoodleCourse \"" + courseTopic.getSimpleValue() + "\"");
                 } else {
                     log.warning("NOT IMPLEMENTED YET => UPDATING EXISTING COURSE");
                     // todo: allow update of course name, shortname topics
@@ -160,7 +161,7 @@ public class MoodleServiceClient extends PluginActivator {
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
 
         long courseId = -1;
-        Topic courseTopic = dms.getTopic(topicId, true, clientState);
+        Topic courseTopic = dms.getTopic(topicId, true);
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         String parameter = "courseid=" + courseId;
         String data = callMoodle(token, "core_course_get_contents", parameter);
@@ -184,7 +185,7 @@ public class MoodleServiceClient extends PluginActivator {
                 JSONObject section = response.getJSONObject(i);
                 Topic sectionTopic = getMoodleSectionTopic(section.getLong("id"));
                 if (sectionTopic == null) {
-                    sectionTopic = createMoodleSectionTopic(section, clientState);
+                    sectionTopic = createMoodleSectionTopic(section, i, clientState);
                 } else {
                     // todo: allow update of section name, summary-topics
                     log.warning("NOT IMPLEMENTED YET => UPDATING SECTION \r\n " + sectionTopic.toJSON().toString());
@@ -207,6 +208,9 @@ public class MoodleServiceClient extends PluginActivator {
                     }
                 }
             }
+            log.info("Loaded materials for course \""+courseTopic.getSimpleValue()+"\"");
+            // Update (internal) "Last modifed" value of our just altered Course-Topic
+            dms.updateTopic(new TopicModel(courseTopic.getId()), null);
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
             try {
@@ -219,60 +223,44 @@ public class MoodleServiceClient extends PluginActivator {
         return courseTopic;
     }
 
-    /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
-    @GET
-    @Path("/user")
-    public Topic setMoodleUserId() throws WebApplicationException {
-
-        Topic userAccount = checkAuthorization();
-        String token = getMoodleSecurityKey(userAccount);
-        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-
-        String parameter = "serviceshortnames[0]=" + MOODLE_SERVICE_NAME;
-        String data = callMoodle(token, "core_webservice_get_site_info", parameter);
-        try {
-            JSONObject response = new JSONObject(data.toString());
-            long userId = response.getLong("userid");
-            setMoodleUserId(userAccount, userId);
-        } catch (JSONException ex) {
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
-            try {
-                JSONObject exception = new JSONObject(data.toString());
-                log.warning("MoodleException: " + exception.getString("message"));
-            } catch (JSONException ex1) {
-                Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
-            }
-        }
-        return userAccount;
-    }
-
     /** Relates the moodle-security-key to our currently logged-in user-account. **/
     @POST
-    @Path("/set/key/{id}")
+    @Path("/key/{id}")
     @Consumes(MediaType.APPLICATION_JSON)
     @Produces(MediaType.APPLICATION_JSON)
     public String setMoodleSecurityKey(@PathParam("id") int id, final String input ) {
         DeepaMehtaTransaction tx = dms.beginTx();
         try {
+            // 1) Store security key for this user
             Topic userAccount = checkAuthorization();
             if (userAccount.getId() != id) throw new WebApplicationException(new RuntimeException("Get a job."), 401);
-            Topic user = dms.getTopic(id, true, null);
+            Topic user = dms.getTopic(id, true);
             JSONObject payload = new JSONObject(input);
             String moodle_key = payload.getString("moodle_key");
             user.setProperty(MOODLE_SECURITY_KEY_URI, moodle_key, false);		// addToIndex=false **/
+            // 2) Fetch user_id from moodle installation (to be able to start querying the service)
+            // And it looks like our new security key is already written to DB at this point
+            // (otherwise the following request would fail).
+            fetchAndSetMoodleUserId(); // This could cause a rollback (so that no security key is written).
             tx.success();
             return "{ \"result\": \"OK\"}";
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
             tx.failure();
-            throw new WebApplicationException(new Throwable("Problem inspecting your payload."), 500);
+            throw new WebApplicationException(new Throwable("Problems reading your payload."), 500);
+        } catch (WebApplicationException wex) {
+            log.info("ERROR: Your Moodle UserId could not be fetched. Your security key must be entered again "
+                + "once your administrator configured a proper service endpoint");
+            tx.failure();
+            throw new WebApplicationException(new Throwable("Due to a (remote) configuration error (or missing "
+                    + "internet connection) your security key could not be set."), 500);
         } finally {
             tx.finish();
         }
     }
 
     @GET
-    @Path("/get/key")
+    @Path("/key")
     @Produces(MediaType.TEXT_PLAIN)
     public String getMoodleSecurityKey() {
         Topic userAccount = checkAuthorization();
@@ -297,6 +285,30 @@ public class MoodleServiceClient extends PluginActivator {
     }
 
     // ---
+
+    /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
+    private Topic fetchAndSetMoodleUserId() throws WebApplicationException {
+
+        Topic userAccount = checkAuthorization();
+        String token = getMoodleSecurityKey(userAccount);
+        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
+        String parameter = "serviceshortnames[0]=" + MOODLE_SERVICE_NAME;
+        String data = callMoodle(token, "core_webservice_get_site_info", parameter);
+        try {
+            JSONObject response = new JSONObject(data.toString());
+            long userId = response.getLong("userid");
+            setMoodleUserId(userAccount, userId);
+        } catch (JSONException ex) {
+            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+            try {
+                JSONObject exception = new JSONObject(data.toString());
+                log.warning("MoodleException: " + exception.getString("message"));
+            } catch (JSONException ex1) {
+                Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
+            }
+        }
+        return userAccount;
+    }
 
     private String callMoodle (String key, String functionName, String params) {
 
@@ -336,7 +348,7 @@ public class MoodleServiceClient extends PluginActivator {
     private boolean hasParticipantEdge (Topic course, Topic user) {
         boolean value = false;
         Topic userAccount = course.getRelatedTopic(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
-                DEFAULT_ROLE_TYPE_URI, USER_ACCOUNT_TYPE_URI, true, true, null);
+                DEFAULT_ROLE_TYPE_URI, USER_ACCOUNT_TYPE_URI, true, true);
         if (userAccount != null && user.getId() == userAccount.getId()) return value = true;
         return value;
     }
@@ -344,7 +356,7 @@ public class MoodleServiceClient extends PluginActivator {
     private boolean hasAggregatingCourseParentEdge (Topic child, Topic parent) {
         boolean value = false;
         Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
-                PARENT_ROLE_TYPE_URI, MOODLE_COURSE_URI, true, true, null);
+                PARENT_ROLE_TYPE_URI, MOODLE_COURSE_URI, true, true);
         if (topic != null && parent.getId() == topic.getId()) return value = true;
         return value;
     }
@@ -352,7 +364,7 @@ public class MoodleServiceClient extends PluginActivator {
     private boolean hasAggregatingSectionParentEdge (Topic child, Topic parent) {
         boolean value = false;
         Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
-                PARENT_ROLE_TYPE_URI, MOODLE_SECTION_URI, true, true, null);
+                PARENT_ROLE_TYPE_URI, MOODLE_SECTION_URI, true, true);
         if (topic != null && parent.getId() == topic.getId()) return value = true;
         return value;
     }
@@ -387,15 +399,15 @@ public class MoodleServiceClient extends PluginActivator {
     }
 
     private Topic getMoodleCourseTopic(long courseId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_COURSE_URI_PREFIX + courseId), true, null);
+        return dms.getTopic("uri", new SimpleValue(ISIS_COURSE_URI_PREFIX + courseId), true);
     }
 
     private Topic getMoodleSectionTopic(long sectionId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_SECTION_URI_PREFIX + sectionId), true, null);
+        return dms.getTopic("uri", new SimpleValue(ISIS_SECTION_URI_PREFIX + sectionId), true);
     }
 
     private Topic getMoodleItemTopic(long itemId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_ITEM_URI_PREFIX + itemId), true, null);
+        return dms.getTopic("uri", new SimpleValue(ISIS_ITEM_URI_PREFIX + itemId), true);
     }
 
     private Topic createMoodleCourseTopic(JSONObject object, ClientState clientState) {
@@ -415,7 +427,7 @@ public class MoodleServiceClient extends PluginActivator {
         return null;
     }
 
-    private Topic createMoodleSectionTopic(JSONObject object, ClientState clientState) {
+    private Topic createMoodleSectionTopic(JSONObject object, int nr, ClientState clientState) {
         try {
             long sectionId = object.getLong("id");
             String name = object.getString("name");
@@ -423,6 +435,7 @@ public class MoodleServiceClient extends PluginActivator {
             CompositeValueModel model = new CompositeValueModel();
             model.put(MOODLE_SECTION_NAME_URI, name);
             model.put(MOODLE_SECTION_SUMMARY_URI, summary);
+            model.put(MOODLE_SECTION_ORDINAL_NR, nr);
             TopicModel section = new TopicModel(ISIS_SECTION_URI_PREFIX + sectionId, MOODLE_SECTION_URI, model);
             Topic result = dms.createTopic(section, clientState);
             return result;
@@ -454,6 +467,7 @@ public class MoodleServiceClient extends PluginActivator {
             if (object.has("contents")) {
                 contents = object.getJSONArray("contents");
                 // fixme: per Moodle Item we currently can have just 1 FILE resp. URL // the last one takes it all //
+                if (contents.length() > 1) log.warning("MoodleItem ("+itemId+") has more contents than we can process.");
                 for (int i = 0; i < contents.length(); i++) {
                     JSONObject resource = contents.getJSONObject(i);
                     /* = "", filename = "", filepath = "", fileurl = "",
@@ -499,7 +513,7 @@ public class MoodleServiceClient extends PluginActivator {
             // else if (contents["type"].equals("File") || equals("url")
             TopicModel item = new TopicModel(ISIS_ITEM_URI_PREFIX + itemId, MOODLE_ITEM_URI, model);
             Topic result = dms.createTopic(item, clientState);
-            log.info("CREATED ITEM => " + item.toJSON().toString());
+            // log.info("CREATED ITEM => " + item.toJSON().toString());
             tx.success();
             return result;
         } catch (JSONException ex) {
@@ -513,9 +527,9 @@ public class MoodleServiceClient extends PluginActivator {
 
     private Topic getUserAccountTopic(String username) {
         Topic accountTopic = null;
-        Topic userTopic = dms.getTopic(USER_NAME_TYPE_URI, new SimpleValue(username), true, null);
+        Topic userTopic = dms.getTopic(USER_NAME_TYPE_URI, new SimpleValue(username), true);
         accountTopic = userTopic.getRelatedTopic(COMPOSITION_TYPE_URI, CHILD_ROLE_TYPE_URI, PARENT_ROLE_TYPE_URI,
-                USER_ACCOUNT_TYPE_URI, true, false, null);
+                USER_ACCOUNT_TYPE_URI, true, false);
         return accountTopic;
     }
 
@@ -531,7 +545,6 @@ public class MoodleServiceClient extends PluginActivator {
         if (userAccount.hasProperty(MOODLE_USER_ID_URI)) {
             String id = (String) userAccount.getProperty(MOODLE_USER_ID_URI);
             long moodle_user_id = Long.parseLong(id);
-            log.info("Getting Moodle User-ID " + moodle_user_id);
             return moodle_user_id;
         }
         return -1;
@@ -542,14 +555,15 @@ public class MoodleServiceClient extends PluginActivator {
         userAccount.setProperty(MOODLE_USER_ID_URI, "" + moodleUserId + "", false);
         tx.success();
         tx.finish();
+        log.info("Moodle User Id successfully set => " + moodleUserId);
         return true;
     }
 
     private Topic getMoodleServiceUrl() {
-        return dms.getTopic("uri", new SimpleValue("org.deepamehta.config.moodle_service_url"), true, null);
+        return dms.getTopic("uri", new SimpleValue("org.deepamehta.config.moodle_service_url"), true);
     }
 
-    private Topic checkAuthorization() throws WebApplicationException {
+    private Topic checkAuthorization() {
         String username = aclService.getUsername();
         if (username == null) throw new WebApplicationException(401);
         return getUserAccountTopic(username);
