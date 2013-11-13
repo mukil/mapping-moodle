@@ -88,27 +88,6 @@
                 $('#page-content').append(content_element)
             }
 
-            function render_security_key_form () {
-                var key_form = $('<div class="field-label">Enter Moodle Security Key</div><div class="field-item">'
-                    + '<input type="password" id="moodle-key" placeholder="..."></div>')
-                var $key_save = $('<input>').attr({"type": "submit", "value" : "Save"})
-                    $key_save.click(setMoodleKey)
-                $('#page-content').append(key_form).append($key_save)
-
-                function setMoodleKey () {
-                    var key = $("#moodle-key").val()
-                    var user_id = "7814" // ### get user id of currently logged in user
-                    var data = { "moodle_key" : key, "user_id" : user_id }
-                    var response = dm4c.restc.request("POST", "/moodle/key/" + user_id, data)
-                    if (typeof response === 'undefined') throw new Error("Something mad happened.")
-                    // return response
-                    // ### render success of saving/setting new moodle-key
-                }
-
-            }
-            /// render_page_model(page_model, render_mode)
-            //
-            // dm4c.render.topic_associations(topic.id)
         },
 
         render_form: function(topic) {

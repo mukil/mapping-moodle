@@ -79,11 +79,10 @@
             dm4c.ui.prompt(title, input_label, button_label, function (input) {
 
                 var user_id = dm4c.selected_object.id
-                console.log("input => " + input)
-                console.log("user => " + user_id)
                 //
                 if (input !== "" && input !== " ") {
-                    var response = dm4c.restc.request("POST", "/moodle/key/" + user_id, { "moodle_key" : input, "user_id" : user_id })
+                    var response = dm4c.restc.request("POST", "/moodle/key/" + user_id,
+                        { "moodle_key" : input, "user_id" : user_id })
                     if (response == undefined) throw new Error("Something mad happened.")
                 }
 
