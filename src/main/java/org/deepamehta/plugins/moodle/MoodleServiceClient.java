@@ -16,6 +16,7 @@ import de.deepamehta.plugins.accesscontrol.model.Operation;
 import de.deepamehta.plugins.accesscontrol.model.UserRole;
 import java.io.*;
 import java.net.HttpURLConnection;
+import java.net.MalformedURLException;
 import java.net.URL;
 
 import javax.ws.rs.GET;
@@ -109,7 +110,7 @@ public class MoodleServiceClient extends PluginActivator {
     @GET
     @Path("/courses")
     @Produces("application/json")
-    public Topic getMyMoodleCourses(@HeaderParam("Cookie") ClientState clientState) {
+    public Topic getMoodleCourses(@HeaderParam("Cookie") ClientState clientState) {
 
         // A 401 WebApplicationException thrown in private does turn into a 500 (?)
         Topic userAccount = checkAuthorization();
@@ -119,11 +120,17 @@ public class MoodleServiceClient extends PluginActivator {
         if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
 
         String parameter = "userid=" + userId;
-        String data = callMoodle(token, "core_enrol_get_users_courses", parameter);
+        String data = "";
         // fixme: token and userId are not matched up against each other in this request, changing userId => exploit
         try {
+            data = callMoodle(token, "core_enrol_get_users_courses", parameter);
+            if (data.indexOf("webservice_access_exception") != -1) {
+                log.warning("Looks like external service (webservice feature) is not \"Enabled\" or the called function"
+                        + " is not part of the \"External Service\" defintion on the configured Moodle installation.");
+                throw new WebApplicationException(new MoodleConnectionException(data, 404), 404);
+            }
+            //
             JSONArray response = new JSONArray(data.toString());
-            // log.info("My (UserId: " +userId+ ", Token: " +token+ ") Moodle Courses are: \r\n " + response.toString());
             for (int i = 0; i < response.length(); i++) {
                 JSONObject course = response.getJSONObject(i);
                 Topic courseTopic = getMoodleCourseTopic(course.getLong("id"));
@@ -139,16 +146,16 @@ public class MoodleServiceClient extends PluginActivator {
                 }
             }
         } catch (JSONException ex) {
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
-            log.info("Going on, parsing Moodle Exception:");
             try {
-                JSONObject exception = new JSONObject(data.toString());
-                log.warning("MoodleException: " + exception.getString("message"));
-            } catch (JSONException ex1) {
-                Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
-            }
+                JSONObject response = new JSONObject(data.toString());
+                String exception = response.getString("exception");
+                throw new WebApplicationException(new MoodleConnectionException(exception, 500), 500);
+            } catch (JSONException ex1) {}
+        } catch (MoodleConnectionException mc) {
+            throw new WebApplicationException(new Throwable(mc.message), mc.status);
+        } finally {
+            return userAccount;
         }
-        return userAccount;
     }
 
     @GET
@@ -162,9 +169,16 @@ public class MoodleServiceClient extends PluginActivator {
 
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId, true);
+        // fixme: Here we have a new bug: Occuring on every course (no matter from which moodle instance) when trying to
+        // update course contents, which means .. in line 455 there might be a bug using TopicModel constructor with URI
+        // or, another idea: The log suggests that in this method, our URI is changed
+        // 16.11.2013 16:32:01 de.deepamehta.core.impl.AttachedTopic update
+        // INFO: Updating topic 4028 (new topic (id=4028, uri="", typeUri="null", value="", composite={}))
+        // 16.11.2013 16:32:01 de.deepamehta.core.impl.AttachedDeepaMehtaObject updateUri
+        // INFO: ### Changing URI of topic 4028 from "de.tu-berlin.course.4" -> ""
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         String parameter = "courseid=" + courseId;
-        String data = callMoodle(token, "core_course_get_contents", parameter);
+        String data = "";
         // DEBUG-Information:
         // [ sections { id, name, summary, modules [{ id, name, description (just for label), modname, modicon, availablefrom, availableuntil, contents [
             // {type (either url or file), description (label),
@@ -180,6 +194,7 @@ public class MoodleServiceClient extends PluginActivator {
             // "message":"You cannot execute functions in the course context (course id:3).
             // The context error message was: Course or activity not accessible."}
         try {
+            data = callMoodle(token, "core_course_get_contents", parameter);
             JSONArray response = new JSONArray(data.toString());
             for (int i = 0; i < response.length(); i++) {
                 JSONObject section = response.getJSONObject(i);
@@ -210,7 +225,7 @@ public class MoodleServiceClient extends PluginActivator {
             }
             log.info("Loaded materials for course \""+courseTopic.getSimpleValue()+"\"");
             // Update (internal) "Last modifed" value of our just altered Course-Topic
-            dms.updateTopic(new TopicModel(courseTopic.getId()), null);
+            dms.updateTopic(new TopicModel(courseTopic.getId()), null); // fixme: herewith our topic URI get's altered!
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
             try {
@@ -219,6 +234,8 @@ public class MoodleServiceClient extends PluginActivator {
             } catch (JSONException ex1) {
                 Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
             }
+        } catch (MoodleConnectionException mc) {
+            throw new WebApplicationException(mc, mc.status);
         }
         return courseTopic;
     }
@@ -293,8 +310,9 @@ public class MoodleServiceClient extends PluginActivator {
         String token = getMoodleSecurityKey(userAccount);
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
         String parameter = "serviceshortnames[0]=" + MOODLE_SERVICE_NAME;
-        String data = callMoodle(token, "core_webservice_get_site_info", parameter);
+        String data = "";
         try {
+            data = callMoodle(token, "core_webservice_get_site_info", parameter);
             JSONObject response = new JSONObject(data.toString());
             long userId = response.getLong("userid");
             setMoodleUserId(userAccount, userId);
@@ -306,11 +324,13 @@ public class MoodleServiceClient extends PluginActivator {
             } catch (JSONException ex1) {
                 Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
             }
+        } catch (MoodleConnectionException mc) {
+            throw new WebApplicationException(mc, mc.status);
         }
         return userAccount;
     }
 
-    private String callMoodle (String key, String functionName, String params) {
+    private String callMoodle (String key, String functionName, String params) throws MoodleConnectionException {
 
         Topic serviceUrl = getMoodleServiceUrl();
         String endpointUri = serviceUrl.getSimpleValue().value().toString();
@@ -328,7 +348,10 @@ public class MoodleServiceClient extends PluginActivator {
             wr.writeBytes (params);
             wr.flush();
             wr.close();
-
+            if (con.getResponseCode() != 200) { // this case never occurred to me
+                log.warning("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
+                throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
+            }
             //Get Response
             InputStream is = con.getInputStream();
             BufferedReader rd = new BufferedReader(new InputStreamReader(is));
@@ -339,9 +362,21 @@ public class MoodleServiceClient extends PluginActivator {
                 response.append('\r');
             }
             rd.close();
+            // Handle empty response
+            if (response.toString().isEmpty()) {
+                String message = "MoodleConnection Response was empty. This happens even if webservice features "
+                    + "are completely deactivated or the function is not part of the \"External services\" definition.";
+                log.warning(message);
+                throw new MoodleConnectionException(message, 204);
+            }
             return response.toString();
-        } catch (Exception ex) {
-            throw new WebApplicationException(new RuntimeException(ex.getCause()), 500);
+        } catch (MoodleConnectionException ex) {
+            throw new MoodleConnectionException(ex.message, ex.status);
+        } catch (MalformedURLException ml)  {
+            throw new MoodleConnectionException("DeepaMehta could not connect to malformed url: \"" + queryUrl + "\"",
+                    404);
+        } catch (IOException ex) {
+            throw new MoodleConnectionException("DeepaMehta could not connect to \"" + queryUrl + "\"", 404);
         }
     }
 
@@ -419,6 +454,7 @@ public class MoodleServiceClient extends PluginActivator {
             model.put(MOODLE_COURSE_NAME_URI, fullName);
             model.put(MOODLE_COURSE_SHORT_NAME_URI, shortName);
             TopicModel course = new TopicModel(ISIS_COURSE_URI_PREFIX + courseId, MOODLE_COURSE_URI, model);
+            course.setUri(ISIS_COURSE_URI_PREFIX + courseId);
             Topic result = dms.createTopic(course, clientState);
             return result;
         } catch (JSONException ex) {
@@ -463,6 +499,7 @@ public class MoodleServiceClient extends PluginActivator {
             }
             model.put(MOODLE_ITEM_DESC_URI, description);
             model.put(MOODLE_ITEM_HREF_URI, href);
+            model.put(MOODLE_ITEM_TYPE_URI, type);
             JSONArray contents = null;
             if (object.has("contents")) {
                 contents = object.getJSONArray("contents");
@@ -500,7 +537,9 @@ public class MoodleServiceClient extends PluginActivator {
                         model.put(MOODLE_ITEM_NAME_URI, fileName);
                         model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
                         model.put(MOODLE_ITEM_SIZE_URI, fileSize);
-                        model.put(MOODLE_ITEM_MEDIA_TYPE_URI, JavaUtils.getFileType(fileName));
+                        String file_type = JavaUtils.getFileType(fileName); // Maybe null (e.g. for .ODT-Documents)
+                        if (file_type == null) file_type = "Unknown";
+                        model.put(MOODLE_ITEM_MEDIA_TYPE_URI, file_type);
                         model.put(MOODLE_ITEM_TYPE_URI, resourceType);
                         // we use "timemodified" (if not null) instead of "timecreated"
                         if (resource.has("timemodified") && !resource.isNull("timemodified")) {
@@ -555,7 +594,6 @@ public class MoodleServiceClient extends PluginActivator {
         userAccount.setProperty(MOODLE_USER_ID_URI, "" + moodleUserId + "", false);
         tx.success();
         tx.finish();
-        log.info("Moodle User Id successfully set => " + moodleUserId);
         return true;
     }
 

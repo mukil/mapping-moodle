@@ -1,4 +1,4 @@
-/*global jQuery, dm4c*/
+
 (function ($, dm4c) {
 
     dm4c.add_plugin('org.deepamehta.moodle-plugin', function () {
@@ -24,10 +24,10 @@
             })
 
             $('#page-content').html('<div class="field-label moodle-course-update">'
-                + 'Asking Moodle Installation... </div>')
+                + 'Asking moodle for course contents ... </div>')
         }
 
-        function getMyCourses () {
+        function getCourses () {
             var requestUri = '/moodle/courses'
 
             //
@@ -39,9 +39,18 @@
                     dm4c.do_select_topic(data.id, true)
                 },
                 error: function(jq_xhr, text_status, error_thrown) {
+
+                    if (error_thrown === "Not Found") {
+                        $('#page-content').html('<div class="field-label moodle-error">Moodle Connection Error: '
+                            + 'It looks like the moodle webservice is not setup by the Moodle administrator yet.</div>')
+                    } else {
+                        $('#page-content').html('<div class="field-label moodle-error">Moodle Connection Error: '
+                            + 'Most probably you do not have set your moodle security key / token in DeepaMehta yet.'
+                            + '<br/><br/>You can do so through revealing your \"User Accunt\"-Topic and call the '
+                            + '\"Set moodle key\"-command on that topic.</div>')
+                    }
                     dm4c.page_panel.refresh()
-                    throw "RESTClientError: GET request failed (" + text_status + ": " + error_thrown + " - Hint: "
-                        + " Most probably this user has not set a security key / token yet."
+
                 },
                 complete: function(jq_xhr, text_status) {
                     var status = text_status
@@ -91,9 +100,6 @@
 
         // some (developer) commands
         dm4c.add_listener('topic_commands', function (topic) {
-            /** if (!dm4c.has_create_permission('org.deepamehta.moodle.course')) {
-                return
-            } **/
             var commands = []
             if (topic.type_uri === 'org.deepamehta.moodle.course') {
                 commands.push({is_separator: true, context: 'context-menu'})
@@ -109,14 +115,14 @@
                 if (is_logged_in) {
                     commands.push({is_separator: true, context: 'context-menu'})
                     commands.push({
-                        label: 'Set Moodle Key',
+                        label: 'Set Moodle key',
                         handler: setMoodleKey,
                         context: ['context-menu', 'detail-panel-show']
                     })
                     commands.push({is_separator: true, context: 'context-menu'})
                     commands.push({
-                        label: 'Ask moodle for my courses',
-                        handler: getMyCourses,
+                        label: 'Ask Moodle for my courses',
+                        handler: getCourses,
                         context: ['context-menu', 'detail-panel-show']
                     })
                 }

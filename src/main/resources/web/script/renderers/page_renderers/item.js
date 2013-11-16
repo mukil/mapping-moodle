@@ -13,43 +13,49 @@
 
         render_page: function(topic) {
 
-            // var page_model = create_page_model(topic, render_mode)
-            // dm4c.fire_event("pre_render_page", topic, page_model)
-            var remote_resource = topic.composite['org.deepamehta.moodle.item_url'].value
-            var user_id = undefined
-            var token = ""
-                token = GET("/moodle/key", function(status, response) {
-                    if (status === 401) {
-                        // console.log("User is not logged into DeepaMehta")
-                        render('<div class="field-label">Issue with Moodle Connection</div>')
-                        render('<div class="field-item">You need to be logged in to access "Moodle Items".</div>')
-                        return function () {}
-                    } else if (status === 204) {
-                        // console.log("User is logged into DeepaMehta but does not have a Moodle key set")
-                        render('<div class="field-label">Issue with Moodle Connection</div>')
-                        render('<div class="field-item">We could not find a "Security Key" related '
-                            + 'to your "User Account". </div>')
-                        render_security_key_form()
-                        return function () {}
-                    } else if (status === 200) {
-                        // console.log("Fine: " + status)
-                        token = response
-                        // "User Account" has some Moodle Security Key set
+            //
+            GET("/moodle/key", function(status, response) {
+
+                var token = response
+
+                if (status === 401) {
+
+                    render('<div class="field-label">Issue with Moodle Connection</div>')
+                    render('<div class="field-item">You need to be logged in to access "Moodle Items".</div>')
+                    return function () {}
+
+                } else if (status === 204) {
+
+                    render('<div class="field-label">Issue with Moodle Connection</div>')
+                    render('<div class="field-item">We could not find a "Security Key" related '
+                        + 'to your "User Account". </div>')
+                    render_security_key_form()
+                    return function () {}
+
+                } else if (status === 200) {
+
+                    // Render Moodle Item Page ..
+
+                    if (topic.composite['org.deepamehta.moodle.item_type'].value === "file" ||
+                        topic.composite['org.deepamehta.moodle.item_type'].value === "url") {
+
+                        render($('<div class="field-label">Moodle Item</div>'))
+
+                        var remote_resource = topic.composite['org.deepamehta.moodle.item_url'].value
+
+                        // .. with a moodle webresource-item
                         if (topic.composite['org.deepamehta.moodle.item_type'].value === "url") {
 
-                            // render a moodle webresource-item
-                            render($("<iframe>").attr({src: remote_resource, width: "100%",
+                            render($("<iframe>").attr({src: remote_resource, width: "99%",
                                     height: dm4c.page_panel.height, frameborder: 0}))
 
+                        // .. with a moodle file-item
                         } else if (topic.composite['org.deepamehta.moodle.item_type'].value === "file") {
 
-                            // fetch metadata
                             var media_type = topic.composite['org.deepamehta.moodle.item_media_type'].value
-                            // set new src
-                            remote_resource = remote_resource + "&token=" + token
+                                remote_resource = remote_resource + "&token=" + token
 
                             if (media_type) {
-                                // TODO: let plugins render the file content
                                 if (media_type == "text/plain") {
                                     render($("<pre>").text(dm4c.restc.get_file(path)))
                                     return
@@ -58,7 +64,7 @@
                                     return
                                 } else if (media_type == "application/pdf") {
                                     render($("<embed>").attr({src: remote_resource, type: media_type,
-                                        width: "100%", height: dm4c.page_panel.height}))
+                                        width: "99%", height: 0.9 * dm4c.page_panel.height}))
                                     return
                                 } else if (js.begins_with(media_type, "audio/")) {
                                     render($("<embed>").attr({src: remote_resource, width: "95%", height: 64, bgcolor: "#ffffff"})
@@ -68,21 +74,50 @@
                                     // Note: default embed element is used
                                     // var content = "<video controls=\"\" src=\"" + remote_resource + "\"></video>"
                                 } else if (media_type === "text/html") {
-                                    render($("<iframe>").attr({src: remote_resource, width: "100%",
+                                    // The following triggers a direct file-download in the browser ..
+                                    /** render($("<iframe>").attr({src: remote_resource, width: "100%",
+                                        height: dm4c.page_panel.height, frameborder: 0})) **/
+                                    render($('<div class="field-label">Access source</div>'))
+                                    render(dm4c.ui.button(function(e) {
+                                        render($("<iframe>").attr({src: remote_resource, width: "99%",
                                         height: dm4c.page_panel.height, frameborder: 0}))
+                                    }, "Download HTML Page"))
                                     return
                                 } else {
                                     console.info("Note: default embed element is used")
                                     // throw "media type \"" + media_type + "\" is not supported"
                                 }
                             }
-                            render($("<embed>").attr({src: remote_resource, type: media_type, width: "100%",
-                                height: 0.75 * dm4c.page_panel.width, bgcolor: "#ffffff"}))
-
+                            render($("<embed>").attr({src: remote_resource, type: media_type, width: "99%",
+                                height: dm4c.page_panel.width, bgcolor: "#ffffff"}))
 
                         }
+
+                    // .. with a unsupported type of "Moodle item"
+                    } else {
+
+                        var type = topic.composite['org.deepamehta.moodle.item_type'].value
+                        var href = topic.composite['org.deepamehta.moodle.item_href'].value
+                        render($('<div class="field-label">Moodle Item (' + type + ')</div>'))
+                        render($('<div class="field-item">' + topic.value + '</div>'))
+                        // The following triggers a "Load denied by X-Frame-Options: ../moodle/mod/forum/view.php?id=15
+                        // does not permit cross-origin framing."-Error
+                        /** render(dm4c.ui.button(function(e) {
+                            render($("<iframe>").attr({src: href, width: "100%",
+                                height: dm4c.page_panel.height, frameborder: 0}))
+                        }, "View source")) **/
+                        //
+                        render($('<div class="field-label">Access source</div>'))
+                        render($('<div class="field-item"><a class="go-to-source" target="_blank" '
+                            + 'href="'+href+'">Open in new window</a></div>'))
+                        // We cannot access this moodle items, should instead render their metadata and insert a button
+                        // allowing to "View in moodle"
+                        return
                     }
-                })
+                }
+            }) // End of token GET request handler
+
+            //
 
             function render(content_element) {
                 $('#page-content').append(content_element)
@@ -91,10 +126,12 @@
         },
 
         render_form: function(topic) {
-            // fixme: show warning
-            console.log("Page Form Renderer we cannot update (remotely stored) Moodle Items")
+
+            console.warn("Page Form Renderer we cannot update (remotely stored) Moodle Items")
+            // TOOD: Allow tagging
             return function() {
                 // dm4c.do_update_topic(dm4c.render.page_model.build_object_model(page_model))
+                topic
             }
         }
     })
