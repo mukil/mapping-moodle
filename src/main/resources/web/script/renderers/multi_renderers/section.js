@@ -15,6 +15,8 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.section_multi_renderer', {
 
         })
 
+        // TODO: replace this default renderer since otherwise it is to cumbersome to realize: when a users clicks on a
+        // moodle item, the items' (parent) section shall also be revealed on the canvas. see multi-item.js-renderer
         dm4c.get_multi_renderer("dm4.webclient.default_multi_renderer").render_info(page_models, $parent)
 
     },

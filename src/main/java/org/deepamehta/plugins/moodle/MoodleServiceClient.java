@@ -224,8 +224,12 @@ public class MoodleServiceClient extends PluginActivator {
                 }
             }
             log.info("Loaded materials for course \""+courseTopic.getSimpleValue()+"\"");
-            // Update (internal) "Last modifed" value of our just altered Course-Topic
-            dms.updateTopic(new TopicModel(courseTopic.getId()), null); // fixme: herewith our topic URI get's altered!
+            // Workaround to update (internal) "Last modifed" value of our just altered Course-Topic
+            JSONObject object = new JSONObject();
+            object.put("id", courseTopic.getId());
+            object.put("uri", courseTopic.getUri());
+            object.put("type_uri", courseTopic.getTypeUri());
+            dms.updateTopic(new TopicModel(object), null);
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
             try {

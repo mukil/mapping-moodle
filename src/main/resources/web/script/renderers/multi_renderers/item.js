@@ -14,10 +14,6 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                     if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_href')) {
                         url = item.composite['org.deepamehta.moodle.item_href'].value
                     }
-                    var timestamp = ""
-                    if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_modified')) {
-                        timestamp = "modified at " + item.composite['org.deepamehta.moodle.item_modified'].value + ""
-                    }
                     var iconSrc = ""
                     if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_icon')) {
                         iconSrc = item.composite['org.deepamehta.moodle.item_icon'].value
@@ -32,8 +28,8 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                         var topicId = this.id
                         dm4c.do_reveal_related_topic(topicId, "show")
                     })
-                    $listItem.append('<img src="' + iconSrc + '">' +name+ ' <small>' +timestamp+ '</small>'
-                        + '<br/><small>Source: <a href="url" target="_blank">' + url + '</a></small>')
+                    $listItem.append('<img src="' + iconSrc + '">' +name)
+                    // + ' <small>' +new Date(timestamp).toGMTString()+ '</small>'
                     list.append($('<li class="moodle-item">').html($listItem))
                 }
             }
