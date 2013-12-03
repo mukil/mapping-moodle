@@ -46,7 +46,7 @@ public class MoodleServiceClient extends PluginActivator {
     private String COMPOSITION_TYPE_URI = "dm4.core.composition";
     private String USER_ACCOUNT_TYPE_URI = "dm4.accesscontrol.user_account";
     private String USER_NAME_TYPE_URI = "dm4.accesscontrol.username";
-    private String WEB_RESOURCE_TYPE_URI = "dm4.webbrowser.web_resource";
+    // private String WEB_RESOURCE_TYPE_URI = "dm4.webbrowser.web_resource";
 
     private String MOODLE_PARTICIPANT_EDGE = "org.deepamehta.moodle.course_participant";
 
@@ -68,10 +68,13 @@ public class MoodleServiceClient extends PluginActivator {
     private String MOODLE_ITEM_HREF_URI = "org.deepamehta.moodle.item_href";
     private String MOODLE_ITEM_TYPE_URI = "org.deepamehta.moodle.item_type";
     private String MOODLE_ITEM_MODIFIED_URI = "org.deepamehta.moodle.item_modified";
-    private String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
-    private String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
-    private String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
+    // private String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
+    // private String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
+    // private String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
     private String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
+
+    private String SERVICE_ENDPOINT_TYPE_URI = "org.deepamehta.config.moodle_service_url";
+    private String USERNAME_OF_SETTINGS_ADMINISTRATOR = "Malte";
 
     private String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
     private String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
@@ -83,25 +86,18 @@ public class MoodleServiceClient extends PluginActivator {
     private String ISIS_SECTION_URI_PREFIX = "de.tu-berlin.section.";
     private String ISIS_ITEM_URI_PREFIX = "de.tu-berlin.item.";
 
-    private String filerepoPath = "/home/malt/Desktop/";
+
 
     @Override
-    public void postInstall() {
-        if (aclService != null) { // panic check (allPluginsMustBeActive)
+    public void init() {
+        if (aclService != null) {
             Topic serviceEndpointUri = getMoodleServiceUrl();
-            aclService.setCreator(serviceEndpointUri, "admin");
-            aclService.setOwner(serviceEndpointUri, "admin");
+            aclService.setCreator(serviceEndpointUri, USERNAME_OF_SETTINGS_ADMINISTRATOR);
+            aclService.setOwner(serviceEndpointUri, USERNAME_OF_SETTINGS_ADMINISTRATOR);
             AccessControlList aclist = new AccessControlList()
                     .addEntry(new ACLEntry(Operation.WRITE, UserRole.CREATOR));
             aclService.setACL(serviceEndpointUri, aclist);
         }
-    }
-
-    @Override
-    public void init() {
-        String configuredPath = System.getProperty("dm4.filerepo.path");
-        if (configuredPath != null || !configuredPath.equals("")) filerepoPath = configuredPath + "/";
-        log.info("Mapping Moodle Plugin set to run on => \"" + filerepoPath + "\"");
     }
 
     /**
@@ -180,11 +176,12 @@ public class MoodleServiceClient extends PluginActivator {
         String parameter = "courseid=" + courseId;
         String data = "";
         // DEBUG-Information:
-        // [ sections { id, name, summary, modules [{ id, name, description (just for label), modname, modicon, availablefrom, availableuntil, contents [
-            // {type (either url or file), description (label),
+        // [ sections { id, name, summary, modules [{ id, name, description (just for label), modname, modicon,
+            // availablefrom, availableuntil, contents [ {type (either url or file), description (label),
             // resource: filename, filepath, filesize, author, license, fileurl, description
             // supported modules (by modname) shall be:
-            // resource(file) (name, contents), url(fileurl) (name, contents), label (name, description), page(htmlfile) (name, contents)
+            //  resource(file) (name, contents), url(fileurl) (name, contents), label (name, description),
+            //  page(htmlfile) (name, contents)
             // unsupported modules (by modname) will be (though we'll keep the name and the url for each):
             // folder, quiz, assign, choice, book, glossary, forum
         // ] }] } ]
@@ -225,16 +222,13 @@ public class MoodleServiceClient extends PluginActivator {
             }
             log.info("Loaded materials for course \""+courseTopic.getSimpleValue()+"\"");
             // Workaround to update (internal) "Last modifed" value of our just altered Course-Topic
-            JSONObject object = new JSONObject();
-            object.put("id", courseTopic.getId());
-            object.put("uri", courseTopic.getUri());
-            object.put("type_uri", courseTopic.getTypeUri());
-            dms.updateTopic(new TopicModel(object), null);
+            dms.updateTopic(new TopicModel(courseTopic.getId(), courseTopic.getUri(), null, null, null), null);
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
             try {
                 JSONObject exception = new JSONObject(data.toString());
-                log.warning("MoodleException: " + exception.getString("message"));
+                String message = exception.getString("message");
+                throw new WebApplicationException(new MoodleConnectionException(message, 500), 500);
             } catch (JSONException ex1) {
                 Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
             }
@@ -508,7 +502,7 @@ public class MoodleServiceClient extends PluginActivator {
             if (object.has("contents")) {
                 contents = object.getJSONArray("contents");
                 // fixme: per Moodle Item we currently can have just 1 FILE resp. URL // the last one takes it all //
-                if (contents.length() > 1) log.warning("MoodleItem ("+itemId+") has more contents than we can process.");
+                if (contents.length() > 1) log.warning("MoodleItem ("+itemId+") has more contents than we can process");
                 for (int i = 0; i < contents.length(); i++) {
                     JSONObject resource = contents.getJSONObject(i);
                     /* = "", filename = "", filepath = "", fileurl = "",
@@ -602,7 +596,7 @@ public class MoodleServiceClient extends PluginActivator {
     }
 
     private Topic getMoodleServiceUrl() {
-        return dms.getTopic("uri", new SimpleValue("org.deepamehta.config.moodle_service_url"), true);
+        return dms.getTopic("uri", new SimpleValue(SERVICE_ENDPOINT_TYPE_URI), true);
     }
 
     private Topic checkAuthorization() {

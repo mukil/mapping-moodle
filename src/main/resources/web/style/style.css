@@ -6,6 +6,30 @@ ul.moodle-items {
     list-style-type: none;
 }
 
+#page-content .tag-item-view {
+    display: inline-block;
+    cursor: pointer;
+    color: gray;
+}
+
+#page-content .tag-item-view:hover {
+    color: black;
+}
+
+#page-content .field-label.moodle-item {
+    margin-top: 5px;
+}
+
+#page-content .tag-item-view img {
+    padding: 4px;
+}
+
+#page-content .tag-name {
+    position: relative;
+    top: -6px;
+    left: 2px;
+}
+
 li.moodle-item {
     color: #333;
     border: 1px solid #000;

@@ -3,7 +3,7 @@
 
     dm4c.add_plugin('org.deepamehta.moodle-plugin', function () {
 
-        function getCourseContents () {
+        function getCourseContents (menu_item, pos_x, pos_y) {
             var requestUri = '/moodle/course/' + dm4c.selected_object.id + '/content'
             //
             $.ajax({
@@ -14,9 +14,20 @@
                     dm4c.do_select_topic(data.id, true)
                 },
                 error: function(jq_xhr, text_status, error_thrown) {
-                    dm4c.page_panel.refresh()
-                    throw "RESTClientError: GET request failed (" + text_status + ": " + error_thrown + " - Hint: "
-                        + " Most probably this user is not a participant of this course, or has not set a security key."
+
+                    // dm4c.page_panel.refresh()
+
+                    var $page_content = $('#page-content').empty()
+                    $page_content.append('<div class="field-label">Issue with Moodle Connection</div>')
+                    $page_content.append('<div class="field-item">'
+                        + '<img src="/org.deepamehta.moodle-plugin/images/mlogo_60.png"><br/>'
+                        + 'Most probably you are not a participant of this course, or you do not have set '
+                        + 'your <i>moodle security key</i> in DeepaMehta yet.<br/><br/>'
+                        + 'You can set your moodle security key in DeepaMehta through revealing your <i>\"User Account\" topic</i> '
+                        + ' and call <i>\"Set Moodle key\"</i>on that.</div>')
+
+                    /* throw "RESTClientError: GET request failed (" + text_status + ": " + error_thrown + " - Hint: "
+                        + " Most probably this user is not a participant of this course, or has not set a security key." **/
                 },
                 complete: function(jq_xhr, text_status) {
                     var status = text_status
@@ -27,7 +38,7 @@
                 + 'Asking moodle for course contents ... </div>')
         }
 
-        function getCourses () {
+        function getCourses (menu_item, pos_x, pos_y) {
             var requestUri = '/moodle/courses'
 
             //
@@ -41,13 +52,18 @@
                 error: function(jq_xhr, text_status, error_thrown) {
 
                     if (error_thrown === "Not Found") {
-                        $('#page-content').html('<div class="field-label moodle-error">Moodle Connection Error: '
+                        $('#page-content').html('<div class="field-label moodle-error">Issue with Moodle Connection: '
+                            + '<img src="/org.deepamehta.moodle-plugin/images/mlogo_60.png"><br/>'
                             + 'It looks like the moodle webservice is not setup by the Moodle administrator yet.</div>')
                     } else {
-                        $('#page-content').html('<div class="field-label moodle-error">Moodle Connection Error: '
-                            + 'Most probably you do not have set your moodle security key / token in DeepaMehta yet.'
-                            + '<br/><br/>You can do so through revealing your \"User Accunt\"-Topic and call the '
-                            + '\"Set moodle key\"-command on that topic.</div>')
+
+                        var $page_content = $('#page-content')
+                        $page_content.append('<div class="field-label">Issue with Moodle Connection</div>')
+                        $page_content.append('<div class="field-item"><img src="/org.deepamehta.moodle-plugin/images/mlogo_60.png"><br/>'
+                            + 'Most probably you do not have set your <i>moodle security key</i> in DeepaMehta yet.'
+                            + '<br/><br/>You can set your moodle security key in DeepaMehta through revealing your <i>\"User Account\" topic</i> '
+                            + ' and call <i>\"Set Moodle key\"</i>on that.</div>')
+
                     }
                     dm4c.page_panel.refresh()
 
@@ -70,6 +86,7 @@
                 dataType: "text", processData: true, async: false,
                 success: function(data, text_status, jq_xhr) {
                     // dm4c.do_select_topic(data.id, true)
+                    if (typeof data === "undefined") return false // this seems to match (new) response semantics
                     if (data != "") response = true
                 },
                 error: function(jq_xhr, text_status, error_thrown) {
@@ -100,6 +117,7 @@
 
         // some (developer) commands
         dm4c.add_listener('topic_commands', function (topic) {
+
             var commands = []
             if (topic.type_uri === 'org.deepamehta.moodle.course') {
                 commands.push({is_separator: true, context: 'context-menu'})

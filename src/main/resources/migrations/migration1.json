@@ -294,8 +294,7 @@
                         "dm4.webclient.searchable_as_unit": true,
                         "dm4.webclient.rows": 1,
                         "dm4.webclient.multi_renderer_uri" : "org.deepamehta.moodle.item_multi_renderer",
-                        "dm4.webclient.page_renderer_uri" : "org.deepamehta.moodle.item_page_renderer"
-
+                        "dm4.webclient.page_renderer_uri" : "org.deepamehta.moodle.item_page_renderer",
                     }
                 }
             ]
@@ -454,6 +453,7 @@
                 {
                     "type_uri": "dm4.webclient.view_config",
                     "composite": {
+                        "dm4.webclient.icon": "/org.deepamehta.moodle-plugin/images/ball-orange.png",
                         "dm4.webclient.show_in_create_menu": false,
                         "dm4.webclient.searchable_as_unit": true,
                         "dm4.webclient.rows": 1,
