@@ -179,6 +179,7 @@ public class MoodleServiceClient extends PluginActivator {
 
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId, true);
+        courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         // fixme: workaround #34
         String parameter = "courseid=" + courseId;
         String data = "";
