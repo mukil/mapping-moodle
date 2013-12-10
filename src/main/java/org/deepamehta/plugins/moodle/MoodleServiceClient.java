@@ -32,6 +32,20 @@ import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
 
+
+/**
+ *
+ * A webservice-client enabling collaborative mapping on course-materials (and more) for any moodle
+ * (2.4+) course. A very simple plugin to connect users of DeepaMehta 4 with a moodle installation.
+ *
+ * @author Malte Reißig (<malte@mikromedia.de>)
+ * @website https://github.com/mukil/mapping-moodle
+ * @version 1.2.0
+ *
+ * Note: No update mechanism present.
+ *
+ */
+
 @Path("/moodle")
 public class MoodleServiceClient extends PluginActivator {
 
@@ -48,43 +62,43 @@ public class MoodleServiceClient extends PluginActivator {
     private String USER_NAME_TYPE_URI = "dm4.accesscontrol.username";
     // private String WEB_RESOURCE_TYPE_URI = "dm4.webbrowser.web_resource";
 
-    private String MOODLE_PARTICIPANT_EDGE = "org.deepamehta.moodle.course_participant";
+    public static final String MOODLE_PARTICIPANT_EDGE = "org.deepamehta.moodle.course_participant";
 
-    private String MOODLE_COURSE_URI = "org.deepamehta.moodle.course";
-    private String MOODLE_COURSE_NAME_URI = "org.deepamehta.moodle.course_name";
-    private String MOODLE_COURSE_SHORT_NAME_URI = "org.deepamehta.moodle.course_short_name";
+    public static final String MOODLE_COURSE_URI = "org.deepamehta.moodle.course";
+    public static final String MOODLE_COURSE_NAME_URI = "org.deepamehta.moodle.course_name";
+    public static final String MOODLE_COURSE_SHORT_NAME_URI = "org.deepamehta.moodle.course_short_name";
 
-    private String MOODLE_SECTION_URI = "org.deepamehta.moodle.section";
-    private String MOODLE_SECTION_NAME_URI = "org.deepamehta.moodle.section_name";
-    private String MOODLE_SECTION_SUMMARY_URI = "org.deepamehta.moodle.section_summary";
-    private String MOODLE_SECTION_ORDINAL_NR = "org.deepamehta.moodle.section_ordinal_nr";
+    public static final String MOODLE_SECTION_URI = "org.deepamehta.moodle.section";
+    public static final String MOODLE_SECTION_NAME_URI = "org.deepamehta.moodle.section_name";
+    public static final String MOODLE_SECTION_SUMMARY_URI = "org.deepamehta.moodle.section_summary";
+    public static final String MOODLE_SECTION_ORDINAL_NR = "org.deepamehta.moodle.section_ordinal_nr";
 
-    private String MOODLE_ITEM_URI = "org.deepamehta.moodle.item";
-    private String MOODLE_ITEM_NAME_URI = "org.deepamehta.moodle.item_name";
-    private String MOODLE_ITEM_ICON_URI = "org.deepamehta.moodle.item_icon";
-    private String MOODLE_ITEM_REMOTE_URL_URI = "org.deepamehta.moodle.item_url";
-    private String MOODLE_ITEM_MEDIA_TYPE_URI = "org.deepamehta.moodle.item_media_type";
-    private String MOODLE_ITEM_DESC_URI = "org.deepamehta.moodle.item_description";
-    private String MOODLE_ITEM_HREF_URI = "org.deepamehta.moodle.item_href";
-    private String MOODLE_ITEM_TYPE_URI = "org.deepamehta.moodle.item_type";
-    private String MOODLE_ITEM_MODIFIED_URI = "org.deepamehta.moodle.item_modified";
-    // private String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
-    // private String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
-    // private String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
-    private String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
+    public static final String MOODLE_ITEM_URI = "org.deepamehta.moodle.item";
+    public static final String MOODLE_ITEM_NAME_URI = "org.deepamehta.moodle.item_name";
+    public static final String MOODLE_ITEM_ICON_URI = "org.deepamehta.moodle.item_icon";
+    public static final String MOODLE_ITEM_REMOTE_URL_URI = "org.deepamehta.moodle.item_url";
+    public static final String MOODLE_ITEM_MEDIA_TYPE_URI = "org.deepamehta.moodle.item_media_type";
+    public static final String MOODLE_ITEM_DESC_URI = "org.deepamehta.moodle.item_description";
+    public static final String MOODLE_ITEM_HREF_URI = "org.deepamehta.moodle.item_href";
+    public static final String MOODLE_ITEM_TYPE_URI = "org.deepamehta.moodle.item_type";
+    public static final String MOODLE_ITEM_MODIFIED_URI = "org.deepamehta.moodle.item_modified";
+    // public static final String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
+    // public static final String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
+    // public static final String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
+    public static final String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
 
-    private String SERVICE_ENDPOINT_TYPE_URI = "org.deepamehta.config.moodle_service_url";
-    private String USERNAME_OF_SETTINGS_ADMINISTRATOR = "Malte";
+    public static final String SERVICE_ENDPOINT_TYPE_URI = "org.deepamehta.config.moodle_service_url";
+    public static final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "admin";
 
-    private String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
-    private String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
+    public static final String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
+    public static final String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
 
-    private String MOODLE_SERVICE_NAME = "eduzen_web_service";
-    private String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
+    public static final String MOODLE_SERVICE_NAME = "eduzen_web_service";
+    public static final String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
 
-    private String ISIS_COURSE_URI_PREFIX = "de.tu-berlin.course.";
-    private String ISIS_SECTION_URI_PREFIX = "de.tu-berlin.section.";
-    private String ISIS_ITEM_URI_PREFIX = "de.tu-berlin.item.";
+    public static final String ISIS_COURSE_URI_PREFIX = "de.tu-berlin.course.";
+    public static final String ISIS_SECTION_URI_PREFIX = "de.tu-berlin.section.";
+    public static final String ISIS_ITEM_URI_PREFIX = "de.tu-berlin.item.";
 
 
 
@@ -165,14 +179,7 @@ public class MoodleServiceClient extends PluginActivator {
 
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId, true);
-        // fixme: Here we have a new bug: Occuring on every course (no matter from which moodle instance) when trying to
-        // update course contents, which means .. in line 455 there might be a bug using TopicModel constructor with URI
-        // or, another idea: The log suggests that in this method, our URI is changed
-        // 16.11.2013 16:32:01 de.deepamehta.core.impl.AttachedTopic update
-        // INFO: Updating topic 4028 (new topic (id=4028, uri="", typeUri="null", value="", composite={}))
-        // 16.11.2013 16:32:01 de.deepamehta.core.impl.AttachedDeepaMehtaObject updateUri
-        // INFO: ### Changing URI of topic 4028 from "de.tu-berlin.course.4" -> ""
-        courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
+        // fixme: workaround #34
         String parameter = "courseid=" + courseId;
         String data = "";
         // DEBUG-Information:

@@ -7,7 +7,7 @@
     <name>DeepaMehta 4 Moodle Plugin</name>
     <groupId>org.deepamehta</groupId>
     <artifactId>moodle-plugin</artifactId>
-    <version>1.1.2-SNAPSHOT</version>
+    <version>1.1.2</version>
     <packaging>bundle</packaging>
 
     <parent>
@@ -15,14 +15,7 @@
         <artifactId>deepamehta-plugin-parent</artifactId>
         <version>4.1.2</version>
     </parent>
-
-    <!-- repositories>
-        <repository>
-            <id>deepamehta-public-repository</id>
-            <url>http://deepamehta.newthinking.net/maven2</url>
-        </repository>
-    </repositories-->
-
+    
     <dependencies>
         <dependency>
             <groupId>de.deepamehta</groupId>
