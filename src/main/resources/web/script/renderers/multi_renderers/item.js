@@ -28,7 +28,6 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                     $listItem = $('<div id="' +item.id+ '">')
                     $listItem.click(function(e) {
                         var topicId = this.id
-                        console.log(section)
                         dm4c.do_reveal_related_topic(section.id, "show")
                         dm4c.do_reveal_related_topic(topicId, "show")
                     })

@@ -15,8 +15,6 @@
 
         render_page: function(topic) {
 
-            console.log(topic)
-
             //
             GET("/moodle/key", function(status, response) {
 
