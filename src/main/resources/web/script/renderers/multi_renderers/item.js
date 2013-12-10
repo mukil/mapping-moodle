@@ -7,13 +7,15 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
 
         var list = $('<ul class="moodle-items">')
         for (var i = 0; i < page_models.length; i++) {
+            //
+            var section = page_models[i].parent.object
             var item = page_models[i].object
             if (item != undefined) {
                 if (item.id != -1) {
-                    var url = ""
+                    /** var url = ""
                     if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_href')) {
                         url = item.composite['org.deepamehta.moodle.item_href'].value
-                    }
+                    } **/
                     var iconSrc = ""
                     if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_icon')) {
                         iconSrc = item.composite['org.deepamehta.moodle.item_icon'].value
@@ -26,6 +28,8 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                     $listItem = $('<div id="' +item.id+ '">')
                     $listItem.click(function(e) {
                         var topicId = this.id
+                        console.log(section)
+                        dm4c.do_reveal_related_topic(section.id, "show")
                         dm4c.do_reveal_related_topic(topicId, "show")
                     })
                     $listItem.append('<img src="' + iconSrc + '">' +name)

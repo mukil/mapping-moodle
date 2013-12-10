@@ -1,4 +1,4 @@
-/** @author: mukil */
+/** @author: mukil <malte@mikromedia.de> */
 
 ul.moodle-items {
     padding-left: 0px;
@@ -9,12 +9,13 @@ ul.moodle-items {
 #page-content .tag-item-view {
     display: inline-block;
     cursor: pointer;
-    color: gray;
+    color: #0000FF;
+    text-decoration: underline;
 }
-
+/*
 #page-content .tag-item-view:hover {
     color: black;
-}
+} **/
 
 #page-content .field-label.moodle-item {
     margin-top: 5px;

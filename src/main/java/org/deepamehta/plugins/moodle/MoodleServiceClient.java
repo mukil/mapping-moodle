@@ -176,7 +176,6 @@ public class MoodleServiceClient extends PluginActivator {
         // fixme: workaround #34
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         String parameter = "courseid=" + courseId;
-        log.info("Fetching course contents for courseId " + courseId);
         String data = "";
         // DEBUG-Information:
         // [ sections { id, name, summary, modules [{ id, name, description (just for label), modname, modicon,
