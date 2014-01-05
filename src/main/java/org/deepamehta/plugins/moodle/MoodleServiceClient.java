@@ -9,25 +9,19 @@ import de.deepamehta.core.service.PluginService;
 import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
-import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
 import de.deepamehta.plugins.accesscontrol.model.ACLEntry;
 import de.deepamehta.plugins.accesscontrol.model.AccessControlList;
 import de.deepamehta.plugins.accesscontrol.model.Operation;
 import de.deepamehta.plugins.accesscontrol.model.UserRole;
+import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-
-import javax.ws.rs.GET;
-import javax.ws.rs.Path;
-import javax.ws.rs.Produces;
-import javax.ws.rs.WebApplicationException;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
-import javax.ws.rs.core.Response;
 import org.codehaus.jettison.json.JSONArray;
 import org.codehaus.jettison.json.JSONException;
 import org.codehaus.jettison.json.JSONObject;
@@ -40,7 +34,7 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.0
+ * @version 1.1.3
  *
  * Note: No update mechanism present.
  *
@@ -181,6 +175,7 @@ public class MoodleServiceClient extends PluginActivator {
         Topic courseTopic = dms.getTopic(topicId, true);
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         // fixme: workaround #34
+        courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
         String parameter = "courseid=" + courseId;
         String data = "";
         // DEBUG-Information:
@@ -321,6 +316,7 @@ public class MoodleServiceClient extends PluginActivator {
             data = callMoodle(token, "core_webservice_get_site_info", parameter);
             JSONObject response = new JSONObject(data.toString());
             long userId = response.getLong("userid");
+            log.info("Set Moodle User ID => " + userId);
             setMoodleUserId(userAccount, userId);
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);

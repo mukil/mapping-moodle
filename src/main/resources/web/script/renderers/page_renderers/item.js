@@ -15,8 +15,6 @@
 
         render_page: function(topic) {
 
-            console.log(topic)
-
             //
             GET("/moodle/key", function(status, response) {
 
@@ -44,7 +42,6 @@
                     if (topic.composite['org.deepamehta.moodle.item_type'].value === "file" ||
                         topic.composite['org.deepamehta.moodle.item_type'].value === "url") {
 
-                        render($('<div class="field-label">Tags</div>'))
                         render_item_tags(topic)
                         render($('<div class="field-label moodle-item">Moodle Item</div>'))
 
@@ -105,7 +102,6 @@
 
                         var type = topic.composite['org.deepamehta.moodle.item_type'].value
                         var href = topic.composite['org.deepamehta.moodle.item_href'].value
-                        render($('<div class="field-label">Tags</div>'))
                         render_item_tags(topic)
                         render($('<div class="field-label">Moodle Item (' + type + ')</div>'))
                         render($('<div class="field-item">' + topic.value + '</div>'))
@@ -134,19 +130,25 @@
             }
 
             function render_item_tags(topic) {
-                if (topic.composite['dm4.tags.tag'].length > 0) {
-                    for (var tag_index in topic.composite['dm4.tags.tag']) {
-                        var tag = topic.composite['dm4.tags.tag'][tag_index]
-                        var $tag_view = $('<div class="tag-item-view" id="'+tag.id+'" title="Show tag: '+tag.value+'">'
-                            + '<img alt="Tag icon" src="/de.deepamehta.tags/images/tag_32.png" width="20">'
-                            + '<span class="tag-name">' + tag.value + '</span>')
-                            $tag_view.click(function(e) {
-                                var tagId = this.id
-                                dm4c.do_reveal_related_topic(tagId, "show")
-                            })
-                        render($tag_view)
+
+                if (typeof topic.composite['dm4.tags.tag'] !== "undefined") {
+                    //
+                    render($('<div class="field-label">Tags</div>'))
+                    if (topic.composite['dm4.tags.tag'].length > 0) {
+                        for (var tag_index in topic.composite['dm4.tags.tag']) {
+                            var tag = topic.composite['dm4.tags.tag'][tag_index]
+                            var $tag_view = $('<div class="tag-item-view" id="'+tag.id+'" title="Show tag: '+tag.value+'">'
+                                + '<img alt="Tag icon" src="/de.deepamehta.tags/images/tag_32.png" width="20">'
+                                + '<span class="tag-name">' + tag.value + '</span>')
+                                $tag_view.click(function(e) {
+                                    var tagId = this.id
+                                    dm4c.do_reveal_related_topic(tagId, "show")
+                                })
+                            render($tag_view)
+                        }
                     }
                 }
+
             }
 
             function empty_page() {

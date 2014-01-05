@@ -1,9 +1,11 @@
 package org.deepamehta.plugins.moodle.migrations;
 
-import de.deepamehta.core.service.Migration;
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.TopicType;
-import de.deepamehta.core.model.*;
+import de.deepamehta.core.model.AssociationModel;
+import de.deepamehta.core.model.SimpleValue;
+import de.deepamehta.core.model.TopicRoleModel;
+import de.deepamehta.core.service.Migration;
 import java.util.logging.Logger;
 
 public class Migration2 extends Migration {
@@ -11,7 +13,7 @@ public class Migration2 extends Migration {
     private Logger logger = Logger.getLogger(getClass().getName());
 
     private String MOODLE_CONFIG = "org.deepamehta.moodle.web_service_url";
-    private String MOODLE_ITEM = "org.deepamehta.moodle.item";
+    // private String MOODLE_ITEM = "org.deepamehta.moodle.item";
     private String WS_DEFAULT_URI = "de.workspaces.deepamehta";
 
     @Override
