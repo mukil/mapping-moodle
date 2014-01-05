@@ -34,7 +34,7 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.0
+ * @version 1.1.3
  *
  * Note: No update mechanism present.
  *
