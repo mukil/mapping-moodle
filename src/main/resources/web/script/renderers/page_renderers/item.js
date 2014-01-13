@@ -218,11 +218,8 @@
                 topic.composite['dm4.tags.tag'] = tags
                 // where this array contents simply look like this (no json-objects to be constructed)
                 // [ "del_id:40190", "ref_id:51291", "ref_id:51131", "ref_id:11318"]
-
                 // 4) this call is needed when implementing page_renderers
                 dm4c.do_update_topic(topic)
-
-                return topic // is this still needed then?
 
             }
 

@@ -1,27 +1,47 @@
 package org.deepamehta.plugins.moodle.migrations;
 
+import de.deepamehta.core.AssociationType;
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.TopicType;
 import de.deepamehta.core.model.AssociationModel;
 import de.deepamehta.core.model.SimpleValue;
+import de.deepamehta.core.model.TopicModel;
 import de.deepamehta.core.model.TopicRoleModel;
 import de.deepamehta.core.service.Migration;
 import java.util.logging.Logger;
+import org.deepamehta.plugins.moodle.MoodleServiceClient;
 
 public class Migration2 extends Migration {
 
     private Logger logger = Logger.getLogger(getClass().getName());
 
-    private String MOODLE_CONFIG = "org.deepamehta.moodle.web_service_url";
+    // private final String MOODLE_CONFIG = "org.deepamehta.moodle.web_service_url";
     // private String MOODLE_ITEM = "org.deepamehta.moodle.item";
-    private String WS_DEFAULT_URI = "de.workspaces.deepamehta";
+    private final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
+    private static final String DEEPAMEHTA_USERNAME_URI = "dm4.accesscontrol.username";
 
     @Override
     public void run() {
 
         // 1) Assign new type "Moodle Config" to our default workspace
-        TopicType moodleConfig = dms.getTopicType(MOODLE_CONFIG);
-        assignWorkspace(moodleConfig);
+        // TopicType moodleConfig = dms.getTopicType(MOODLE_CONFIG);
+        // assignWorkspace(moodleConfig);
+        // 1) create "Twitter Research"-Workspace
+        TopicModel workspace = new TopicModel(WS_MOODLE_URI, "dm4.workspaces.workspace");
+        Topic ws = dms.createTopic(workspace, null);
+        ws.setSimpleValue(MoodleServiceClient.WS_MOODLE_NAME);
+        // 2) assign "admin" username to "Moodle"-Workspace
+        Topic administrator = dms.getTopic(DEEPAMEHTA_USERNAME_URI, new SimpleValue("admin"), true);
+        assignToMoodleWorkspace(administrator);
+        // 3) Assign some of our types to the "Moodle"-Workspace
+        TopicType item = dms.getTopicType(MoodleServiceClient.MOODLE_ITEM_URI);
+        assignToMoodleWorkspace(item);
+        TopicType section = dms.getTopicType(MoodleServiceClient.MOODLE_SECTION_URI);
+        assignToMoodleWorkspace(section);
+        TopicType course = dms.getTopicType(MoodleServiceClient.MOODLE_COURSE_URI);
+        assignToMoodleWorkspace(course);
+        AssociationType participant = dms.getAssociationType(MoodleServiceClient.MOODLE_PARTICIPANT_EDGE);
+        assignToMoodleWorkspace(participant);
 
         /** 2) Assign new type "Moodle Item" to our default workspace
         TopicType moodleItem = dms.getTopicType(MOODLE_ITEM);
@@ -33,18 +53,18 @@ public class Migration2 extends Migration {
 
     // === Workspace ===
 
-    private void assignWorkspace(Topic topic) {
-        if (hasWorkspace(topic)) {
+    private void assignToMoodleWorkspace(Topic topic) {
+        if (hasAnyWorkspace(topic)) {
             return;
         }
-        Topic defaultWorkspace = dms.getTopic("uri", new SimpleValue(WS_DEFAULT_URI), false);
+        Topic defaultWorkspace = dms.getTopic("uri", new SimpleValue(WS_MOODLE_URI), false);
         dms.createAssociation(new AssociationModel("dm4.core.aggregation",
             new TopicRoleModel(topic.getId(), "dm4.core.parent"),
             new TopicRoleModel(defaultWorkspace.getId(), "dm4.core.child")
         ), null);
     }
 
-    private boolean hasWorkspace(Topic topic) {
+    private boolean hasAnyWorkspace(Topic topic) {
         return topic.getRelatedTopics("dm4.core.aggregation", "dm4.core.parent", "dm4.core.child",
             "dm4.workspaces.workspace", false, false, 0).getSize() > 0;
     }
