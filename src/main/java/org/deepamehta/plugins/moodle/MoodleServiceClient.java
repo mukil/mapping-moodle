@@ -154,7 +154,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
 
         return getCourseContentsWithoutAuth(topicId, token, clientState);
-
     }
 
     /** Relates the moodle-security-key to our currently logged-in user-account. **/
@@ -910,3 +909,4 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     }
 
 }
+
