@@ -447,6 +447,12 @@
                     "parent_cardinality_uri": "dm4.core.one",
                     "child_cardinality_uri": "dm4.core.many",
                     "assoc_type_uri": "dm4.core.aggregation_def"
+                },
+                {
+                    "child_type_uri": "dm4.tags.tag",
+                    "parent_cardinality_uri": "dm4.core.one",
+                    "child_cardinality_uri": "dm4.core.many",
+                    "assoc_type_uri": "dm4.core.aggregation_def"
                 }
             ],
             "view_config_topics": [
@@ -456,8 +462,7 @@
                         "dm4.webclient.icon": "/org.deepamehta.moodle-plugin/images/ball-orange.png",
                         "dm4.webclient.show_in_create_menu": false,
                         "dm4.webclient.searchable_as_unit": true,
-                        "dm4.webclient.rows": 1,
-                        "dm4.webclient.locked": true
+                        "dm4.webclient.rows": 1
                     }
                 }
             ]

@@ -1,6 +1,7 @@
 package org.deepamehta.plugins.moodle;
 
 import de.deepamehta.core.Association;
+import de.deepamehta.core.DeepaMehtaObject;
 import de.deepamehta.core.RelatedTopic;
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.model.*;
@@ -13,16 +14,20 @@ import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
 import de.deepamehta.plugins.accesscontrol.event.PostLoginUserListener;
+import de.deepamehta.core.service.event.PostUpdateTopicListener;
 import de.deepamehta.plugins.accesscontrol.model.ACLEntry;
 import de.deepamehta.plugins.accesscontrol.model.AccessControlList;
 import de.deepamehta.plugins.accesscontrol.model.Operation;
 import de.deepamehta.plugins.accesscontrol.model.UserRole;
 import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
+import de.deepamehta.plugins.websockets.event.WebsocketTextMessageListener;
+import de.deepamehta.plugins.websockets.service.WebSocketsService;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
 import java.util.Date;
+import java.util.List;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.ws.rs.*;
@@ -41,25 +46,20 @@ import org.codehaus.jettison.json.JSONObject;
  * @website https://github.com/mukil/mapping-moodle
  * @version 1.2.0
  *
- * fixme: Introduced update mechanism. Creates _must not_ be performed by a user (who has a working session) manually!
- * todo: availablefrom, availableuntil (e.g. questionnaires) and timecreated are not looked at
  */
 
 @Path("/moodle")
-public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener {
+public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener,
+                                                                    WebsocketTextMessageListener {
 
     private static Logger log = Logger.getLogger(MoodleServiceClient.class.getName());
 
-    private AccessControlService aclService;
+    // ---------------------------------------------------------------------------------------------- Instance Variables
 
-    private final String DEFAULT_ROLE_TYPE_URI = "dm4.core.default";
-    private final String CHILD_ROLE_TYPE_URI = "dm4.core.child";
-    private final String PARENT_ROLE_TYPE_URI = "dm4.core.parent";
-    private final String AGGREGATION_TYPE_URI = "dm4.core.aggregation";
-    private final String COMPOSITION_TYPE_URI = "dm4.core.composition";
-    private final String USER_ACCOUNT_TYPE_URI = "dm4.accesscontrol.user_account";
-    private final String USER_NAME_TYPE_URI = "dm4.accesscontrol.username";
-    // private String WEB_RESOURCE_TYPE_URI = "dm4.webbrowser.web_resource";
+    private AccessControlService aclService;
+    private WebSocketsService webSocketsService;
+
+    // --- URIs DeepaMehta and all plugins in use
 
     public static final String WS_MOODLE_NAME = "ISIS / Moodle";
     public static final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
@@ -85,22 +85,45 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     public static final String MOODLE_ITEM_TYPE_URI = "org.deepamehta.moodle.item_type";
     public static final String MOODLE_ITEM_MODIFIED_URI = "org.deepamehta.moodle.item_modified";
     public static final String MOODLE_ITEM_CREATED_URI = "org.deepamehta.moodle.item_created";
-    // public final String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
-    // public final String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
+    public static final String MOODLE_ITEM_AUTHOR_URI = "org.deepamehta.moodle.item_author";
+    public static final String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
     public static final String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
 
-    public static final String SERVICE_ENDPOINT_TYPE_URI = "org.deepamehta.config.moodle_service_url";
-    public static final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "admin"; // Username eligible to edit SERVICE_ENDPOINT
-
-    public final String MOODLE_SERVICE_NAME = "eduzen_web_service";
-    public final String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
+    // --- Data instance URIs for ISIS 2
 
     public static final String ISIS_COURSE_URI_PREFIX = "de.tu-berlin.course.";
     public static final String ISIS_SECTION_URI_PREFIX = "de.tu-berlin.section.";
     public static final String ISIS_ITEM_URI_PREFIX = "de.tu-berlin.item.";
 
+    // --- ISIS 2 Webservice related URIs
+
+    private final String SERVICE_ENDPOINT_TYPE_URI = "org.deepamehta.config.moodle_service_url";
+    private final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "admin"; // Username eligible to edit SETTINGs
     private final String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
     private final String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
+    private final String MOODLE_SERVICE_NAME = "eduzen_web_service";
+    private final String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
+
+    // --- Deepamehta 4 URIs
+
+    private final String DEFAULT_ROLE_TYPE_URI = "dm4.core.default";
+    private final String CHILD_ROLE_TYPE_URI = "dm4.core.child";
+    private final String PARENT_ROLE_TYPE_URI = "dm4.core.parent";
+    private final String AGGREGATION_TYPE_URI = "dm4.core.aggregation";
+    private final String COMPOSITION_TYPE_URI = "dm4.core.composition";
+    private final String USER_ACCOUNT_TYPE_URI = "dm4.accesscontrol.user_account";
+    private final String USER_NAME_TYPE_URI = "dm4.accesscontrol.username";
+    private final String CHILD_URI = "dm4.core.child";
+    private final String PARENT_URI = "dm4.core.parent";
+    private final String TAG_URI = "dm4.tags.tag";
+    private final String REVIEW_SCORE_URI = "org.deepamehta.reviews.score";
+
+
+    // -------------------------------------------------------------------------------------------------- Public Methods
+
+    // --
+    // --- Hook implementations
+    // --
 
     @Override
     public void init() {
@@ -113,48 +136,59 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     }
 
     @Override
+    @ConsumesService({
+        "de.deepamehta.plugins.accesscontrol.service.AccessControlService",
+        "de.deepamehta.plugins.websockets.service.WebSocketsService"
+    })
+    public void serviceArrived(PluginService service) {
+        if (service instanceof AccessControlService) {
+            aclService = (AccessControlService) service;
+        } else if (service instanceof WebSocketsService) {
+            webSocketsService = (WebSocketsService) service;
+        }
+    }
+
+    @Override
+    public void serviceGone(PluginService service) {
+        if (service instanceof AccessControlService) {
+            aclService = null;
+        } else if (service instanceof WebSocketsService) {
+            webSocketsService = null;
+        }
+    }
+
+    // --
+    // --- Listener Implementations
+    // --
+
+    @Override
     public void postLoginUser(String username) {
 
-        final Topic user = checkAuthorization();
-        // 1) Twofold sanity check
-        if (!user.getSimpleValue().toString().equals(username)) {
-            log.info("MoodleServiceClient sanity check failed " + username + " != " + user.getSimpleValue().toString());
-            throw new RuntimeException();
+        startMoodleSynchronization(username);
+
+    }
+
+    @Override
+    public void websocketTextMessage(String message) {
+        log.info("### Receiving message from WebSocket client: \"" + message + "\"");
+
+    }
+
+    private void sendClientNotification(String message, Topic topic) {
+        if (webSocketsService != null) {
+            JSONObject banana = new JSONObject();
+            try {
+                banana.put("message", message);
+                banana.put("topic", topic.toJSON());
+                webSocketsService.broadcast(getUri(), banana.toString());
+            } catch (JSONException j) {
+                log.warning("Problems with sending stupid message to all clients.");
+            }
+        } else {
+            log.warning("MoodleServiceClient.webSocketService is suddenly GONE!");
         }
-        // 2) Start Moodle-Sync for this username
-        startSynchronizationThreadFor(user);
-
     }
 
-    /**
-     * @return \"User Account\"-Topic
-     */
-    @GET
-    @Path("/courses")
-    @Produces("application/json")
-    public Topic getMoodleCourses(@HeaderParam("Cookie") ClientState clientState) {
-
-        // A 401 WebApplicationException thrown in private does turn into a 500 (?)
-        Topic userAccount = checkAuthorization();
-        String token = getMoodleSecurityKey(userAccount);
-        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-        long userId = getMoodleUserId(userAccount); // fixme: how to get the current userId
-        if (userId == -1) throw new WebApplicationException(new RuntimeException("Unkown moodle user id."), 500);
-
-        return getMoodleCoursesWithoutAuth(userAccount, userId, token, clientState);
-    }
-
-    @GET
-    @Path("/course/{topicId}/content")
-    @Produces("application/json")
-    public Topic getCourseContents(@PathParam("topicId") long topicId, @HeaderParam("Cookie") ClientState clientState) {
-
-        Topic userAccount = checkAuthorization();
-        String token = getMoodleSecurityKey(userAccount);
-        if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
-
-        return getCourseContentsWithoutAuth(topicId, token, clientState);
-    }
 
     /** Relates the moodle-security-key to our currently logged-in user-account. **/
     @POST
@@ -170,15 +204,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             Topic user = dms.getTopic(id, true);
             JSONObject payload = new JSONObject(input);
             String moodle_key = payload.getString("moodle_key");
-            // prevent setting of keys which do not look like a moodle security key
+            // 2) prevent setting of keys which do not look like a moodle security key
             if (moodle_key.equals("") || moodle_key.length() != 32) {
                 throw new RuntimeException("Sorry but that does not look like a \"Moodle security key.\"");
             }
             user.setProperty(MOODLE_SECURITY_KEY_URI, moodle_key, false); // addToIndex=false **/
-            // 2) Fetch user_id from moodle installation (to be able to start querying the service)
-            // And it looks like our new security key is already written to DB at this point
-            // (otherwise the following request would fail).
-            fetchAndSetMoodleUserId(userAccount); // This could cause a rollback (so that no security key is written).
+            // 3) Fetch user_id from moodle installation (to be able to start querying the service)
+            fetchAndSetMoodleUserId(userAccount);
             tx.success();
             return "{ \"result\": \"OK\"}";
         } catch (JSONException ex) {
@@ -208,17 +240,22 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return null;
     }
 
-    // ---
+    @GET
+    @Path("/synchronize/{username}")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String startMoodleSynchronization(@PathParam("username") String username) {
 
-    @Override
-    @ConsumesService("de.deepamehta.plugins.accesscontrol.service.AccessControlService")
-    public void serviceArrived(PluginService service) {
-        aclService = (AccessControlService) service;
-    }
+        final Topic user = checkAuthorization();
+        // 1) Twofold sanity check
+        if (!user.getSimpleValue().toString().equals(username)) {
+            log.info("MoodleServiceClient sanity check failed " + username + " != " + user.getSimpleValue().toString());
+            throw new RuntimeException();
+        }
+        // 2) Start Moodle-Sync for this username
+        startSynchronizationThreadFor(user);
 
-    @Override
-    public void serviceGone(PluginService service) {
-        aclService = null;
+        return "OK";
+
     }
 
 
@@ -262,10 +299,20 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 log.info("MoodleServiceClient checking for news in all \"Moodle Courses\" of \""+user_name+"\"");
                 //    and create them if necessary / yet unknown to our system/installation
                 getMoodleCoursesWithoutAuth(local_user, getMoodleUserId(local_user), key, null);
-                // 4) Check for new \"Moodle Items\" in each \"Moodle Course\" our user is "participating"
+                // 4) Check for new \"Moodle Items\" in each tagged \"Moodle Course\" our user is "participating"
                 ResultList<RelatedTopic> courses = getMoodleCoursesByUser(local_user);
                 for (RelatedTopic course : courses) {
-                    getCourseContentsWithoutAuth(course.getId(), key, null);
+                    // 5) set new Moodle Courses (if they have no "Moodle Course Hashtag" set) blocked for synchronziations
+                    course.loadChildTopics(TAG_URI);
+                    if (course.getCompositeValue().has(TAG_URI) &&
+                        course.getCompositeValue().getTopics(TAG_URI).size() > 0) {
+                        Topic courseHashtag = course.getCompositeValue().getTopics(TAG_URI).get(0);
+                        log.info("MoodleServiceClient SYNC Course under tag #" + courseHashtag.getSimpleValue());
+                        getCourseContentsWithoutAuth(course.getId(), key, courseHashtag, null);
+                    } else {
+                        log.warning("MoodleServiceClient waiting with SYNC cause of missing #Hashtag (on \""
+                                + course.getSimpleValue() + "\")");
+                    }
                 }
             }
         }.start();
@@ -319,7 +366,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     if (courseTopic != null) {
                         // 2) Fix ACLEntries (caused by missing request-scope in Thread-local)
                         setDefaultMoodleAdminACLEntries(courseTopic); // just "admin" can edit course-items
-                        log.info("CREATED new MoodleCourse \"" + courseTopic.getSimpleValue() + "\"");
+                        sendClientNotification("New Moodle Course", courseTopic);
                     } else {
                         log.info("OMITTING HIDDEN MoodleCourse \"" + course.getString("shortname") + "\"");
                     }
@@ -343,7 +390,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         }
     }
 
-    private Topic getCourseContentsWithoutAuth(long topicId, String token, ClientState clientState) {
+    private Topic getCourseContentsWithoutAuth(long topicId, String token, Topic hashtag, ClientState clientState) {
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId, true);
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
@@ -360,8 +407,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     sectionTopic = createMoodleSectionTopic(section, i, clientState);
                     if (sectionTopic != null) {
                         // Fix Section-ACL-Entries so that "admin" can edit them
-                        log.info("New Moodle Section was CREATED .. " + sectionTopic.getSimpleValue());
                         setDefaultMoodleAdminACLEntries(sectionTopic);
+                        sendClientNotification("New Moodle Section", sectionTopic);
                     }
                 // 2) Update existing \"Moodle section\"
                 } else {
@@ -374,11 +421,12 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                         JSONObject item = modules.getJSONObject(k);
                         Topic itemTopic = getMoodleItemTopic(item.getLong("id"));
                         if (itemTopic == null) {
-                            itemTopic = createMoodleItemTopic(item, clientState);
+                            itemTopic = createMoodleItemTopic(item, hashtag, clientState);
                             if (itemTopic != null) {
                                 // Fix ACL so that all "Moodle"-WS Members can edit these items
-                                log.info("New Moodle Item was CREATED .. " + itemTopic.getSimpleValue());
                                 setDefaultMoodleGroupACLEntries(itemTopic);
+                                Association creator_edge = assignDefaultAuthorship(itemTopic);
+                                setDefaultMoodleGroupACLEntries(creator_edge);
                             }
                         } else {
                             updateMoodleItemTopic(itemTopic, item, clientState);
@@ -563,7 +611,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 model.put(MOODLE_SECTION_SUMMARY_URI, new_summary);
                 // Attached operations *need* Directives
                 section.setCompositeValue(model, clientState, new Directives());
-                // todo: add to usage report
             }
         } catch (JSONException ex) {
             Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
@@ -571,7 +618,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return null;
     }
 
-    private Topic createMoodleItemTopic(JSONObject object, ClientState clientState) {
+    private Topic createMoodleItemTopic(JSONObject object, Topic hashtag, ClientState clientState) {
         DeepaMehtaTransaction tx = dms.beginTx();
         try {
             if (object.getInt("visible") == 0) return null; // item is hidden, do not create it
@@ -591,6 +638,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             model.put(MOODLE_ITEM_DESC_URI, description);
             model.put(MOODLE_ITEM_HREF_URI, href);
             model.put(MOODLE_ITEM_TYPE_URI, type);
+            // ..) initiliaze neutral review-score on every moodle item
+            model.put(REVIEW_SCORE_URI, 0);
             JSONArray contents = null;
             if (object.has("contents")) {
                 contents = object.getJSONArray("contents");
@@ -599,10 +648,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     fillUpItemModelWithResource(tx, model, resource);
                 }
             }
+            // ..) equip every moodle item with the courses default hashtag
+            model.addRef(TAG_URI, hashtag.getId());
             // else if (contents["type"].equals("File") || equals("url")
             TopicModel item = new TopicModel(ISIS_ITEM_URI_PREFIX + itemId, MOODLE_ITEM_URI, model);
             Topic result = dms.createTopic(item, null);
             assignToMoodleWorkspace(result);
+            // sendTopicNotification("New Moodle Item", result);
             tx.success();
             return result;
         } catch (JSONException ex) {
@@ -647,37 +699,29 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     }
                 }
             }
-            // perform update check on contents of this item
-            if (item.getCompositeValue().has(MOODLE_ITEM_MODIFIED_URI)) { // sometimes int sometimes long (webclient!)
+            // start to perform update checks on contents of this item
+            if (!item.getSimpleValue().toString().equals(model.getString(MOODLE_ITEM_NAME_URI))) {
+                log.info("MoodleServiceClient: The name of the item has changed: ITEM is TO_BE_UPDATED");
+                update_this = true;
+            } else if (item.getCompositeValue().getString(MOODLE_ITEM_TYPE_URI).equals("url")) {
+                update_this = false;
+                // on "url"-items we perform a comparison by-value (cause timestamps are always missing)
+                if (!item.getCompositeValue().getString(MOODLE_ITEM_REMOTE_URL_URI)
+                        .equals(model.getString(MOODLE_ITEM_REMOTE_URL_URI))) {
+                    log.info("MoodleServiceClient: The url-value changed: ITEM is TO_BE_UPDATED");
+                    update_this = true;
+                }
+            } else if (item.getCompositeValue().has(MOODLE_ITEM_MODIFIED_URI)) { // sometimes int sometimes long (webclient!)
                 // get last modification times from our DB
-                try {
-                    long existing_timestamp = item.getCompositeValue().getLong(MOODLE_ITEM_MODIFIED_URI);
-                    String item_type = item.getCompositeValue().getString(MOODLE_ITEM_TYPE_URI);
-                    if (existing_timestamp < last_modified_in_moodle) { // lets write new contents to our \"Moodle Item\"
-                        log.info("MoodleServiceClient: The remote Last-Modified-Timestamp indicates: ITEM is TO_BE_UPDATED");
-                        update_this = true;
-                    }
-                    // fixme: implement update-comparison by url/value
-                    // currently urls can either be never or always updated (cause they are missing timestamps)
-                    if (item_type.equals("url")) {
-                        update_this = false;
-                        // on "url"-items we perform a comparison by-value (cause timestamps are always missing)
-                        if (!item.getCompositeValue().getString(MOODLE_ITEM_REMOTE_URL_URI)
-                                .equals(model.getString(MOODLE_ITEM_REMOTE_URL_URI))) {
-                            log.info("MoodleServiceClient: The url-value changed: ITEM is TO_BE_UPDATED");
-                            update_this = true;
-                        }
-                    }
-                } catch(ClassCastException cex) {
-                    Object modified = item.getCompositeValue().getObject(MOODLE_ITEM_MODIFIED_URI);
-                    Object created = item.getCompositeValue().getObject(MOODLE_ITEM_CREATED_URI);
-                    log.warning("Modified => " + modified.getClass().getCanonicalName() + " \n Created => " + created.getClass().getCanonicalName());
-                    log.warning("Some Moodle Item has suddely an INT as timestamp-value \n " +item.getModel().toString());
-                    update_this = false;
+                long existing_timestamp = item.getCompositeValue().getLong(MOODLE_ITEM_MODIFIED_URI);
+                if (existing_timestamp < last_modified_in_moodle) { // lets write new contents to our \"Moodle Item\"
+                    log.info("MoodleServiceClient: The remote Last-Modified-Timestamp indicates: ITEM is TO_BE_UPDATED");
+                    update_this = true;
                 }
             }
             if (update_this) {
                 dms.updateTopic(new TopicModel(item.getId(), model), clientState);
+                sendClientNotification("Changed Moodle Item", item);
             }
             tx.success();
             return item;
@@ -693,9 +737,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private CompositeValueModel fillUpItemModelWithResource(DeepaMehtaTransaction tx,
             CompositeValueModel model, JSONObject resource) {
         try {
-            // Note that we do not look at: author = "", license = "";
             String resourceType = resource.getString("type");
-            String fileUrl = "", fileName = "";
+            String fileUrl = "", fileName = "", author = "", license = "";
             long last_modified = 0, time_created = 0;
             // 1) Fill up either web resource or file-type
             if (resourceType.equals("url")) { // Moodle Resource is an URL
@@ -710,9 +753,17 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 model.put(MOODLE_ITEM_TYPE_URI, resourceType);
                 // alternatively: model.put(MOODLE_ITEM_HREF_URI, fileurl);
             } else if (resourceType.equals("file")) { // Moodle Resource is an URL
-                // pages _and_ documents are of type file
+               // pages _and_ documents are of type file
                 fileName = resource.getString("filename");
                 fileUrl = resource.getString("fileurl");
+                if (!resource.isNull("license")) {
+                    license = resource.getString("license");
+                    model.put(MOODLE_ITEM_LICENSE_URI, license);
+                }
+                if (!resource.isNull("author")) {
+                    author = resource.getString("author");
+                    model.put(MOODLE_ITEM_AUTHOR_URI, author);
+                }
                 long fileSize = resource.getLong("filesize");
                 model.put(MOODLE_ITEM_NAME_URI, fileName);
                 model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
@@ -725,13 +776,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             }
             // 2) Check for timestamp "Last Modified"
             if (resource.has("timemodified") && !resource.isNull("timemodified")) {
-                last_modified = resource.getLong("timemodified");
+                last_modified = resource.getLong("timemodified") * 1000; // addding three zeros
             } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
                 last_modified = new Date().getTime();
             }
             // 3) Check for timestamp "Created"
             if (resource.has("timecreated") && !resource.isNull("timecreated")) {
-                time_created = resource.getLong("timecreated");
+                time_created = resource.getLong("timecreated")  * 1000; // addding three zeros;
             } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
                 time_created = new Date().getTime();
             }
@@ -783,14 +834,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         accountTopic = userTopic.getRelatedTopic(COMPOSITION_TYPE_URI, CHILD_ROLE_TYPE_URI, PARENT_ROLE_TYPE_URI,
                 USER_ACCOUNT_TYPE_URI, true, false);
         return accountTopic;
-    }
-
-    private String getMoodleSecurityKey(Topic userAccount) {
-        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
-            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
-            return token;
-        }
-        return null;
     }
 
     private long getMoodleUserId(Topic userAccount) {
@@ -861,7 +904,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     // === ACL Fix ===
 
-    private Topic setDefaultMoodleGroupACLEntries(Topic item) {
+    private DeepaMehtaObject setDefaultMoodleGroupACLEntries(DeepaMehtaObject item) {
         // Let's repair broken/missing ACL-Entries
         ACLEntry writeList = new ACLEntry(Operation.WRITE, UserRole.MEMBER, UserRole.CREATOR, UserRole.OWNER);
         aclService.setACL(item, new AccessControlList(writeList));
@@ -870,7 +913,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return item;
     }
 
-    private Topic setDefaultMoodleAdminACLEntries(Topic item) {
+    private DeepaMehtaObject setDefaultMoodleAdminACLEntries(DeepaMehtaObject item) {
         // Let's repair broken/missing ACL-Entries
         ACLEntry writeEntry = new ACLEntry(Operation.WRITE, UserRole.CREATOR, UserRole.OWNER);
         aclService.setACL(item, new AccessControlList(writeEntry));
@@ -908,5 +951,20 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return (moodleWs != null) ? true : false;
     }
 
-}
+    private Association assignDefaultAuthorship(Topic item) {
+        Topic author = dms.getTopic("dm4.accesscontrol.username", new SimpleValue(USERNAME_OF_SETTINGS_ADMINISTRATOR), false);
+        // org.deepamehta.tagging-resources - Constants
+        String CREATOR_EDGE_URI = "org.deepamehta.resources.creator_edge";
+        // String CONTRIBUTOR_EDGE_URI = "org.deepamehta.resources.contributor_edge";
+        if (associationExists(CREATOR_EDGE_URI, item, author)) return null;
+        return dms.createAssociation(new AssociationModel(CREATOR_EDGE_URI,
+                new TopicRoleModel(item.getId(), PARENT_URI),
+                new TopicRoleModel(author.getId(), CHILD_URI)), null);
+    }
 
+    private boolean associationExists(String edge_type, Topic item, Topic user) {
+        List<Association> results = dms.getAssociations(item.getId(), user.getId(), edge_type);
+        return (results.size() > 0) ? true : false;
+    }
+
+}

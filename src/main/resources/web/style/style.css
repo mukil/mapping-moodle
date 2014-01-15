@@ -57,3 +57,42 @@ div.moodle-course-update {
     position: relative;
     top: 10px;
 }
+
+div.notification-container {
+    position: absolute; top: 45px; left: 10px;
+    z-index: 101;
+}
+
+div.moodle-notification {
+    border-radius: 10px;
+    background-color: #f1f1f1;
+    color: #000;
+    float: left;
+    max-width: 340px; max-height: 120px;
+    padding: 10px;
+    margin-right: 10px;
+}
+
+div.moodle-notification .message {
+    font-style: italic;
+    font-weight: bold;
+    padding-right: 35px;
+}
+
+div.moodle-notification .button {
+    text-decoration: underline;
+    cursor: pointer;
+    font-size: small;
+    margin-top: 5px;
+}
+
+div.moodle-notification .remove {
+    cursor: pointer;
+    background-color: blueviolet;
+    color: #fff;
+    font-weight: bold;
+    border-radius: 15px;
+    width: 16px; height: 20px;
+    padding-left: 7px; padding-top: 2px;
+    position: absolute; top: 7px; right: 20px;
+}

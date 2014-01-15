@@ -15,18 +15,13 @@ public class Migration2 extends Migration {
 
     private Logger logger = Logger.getLogger(getClass().getName());
 
-    // private final String MOODLE_CONFIG = "org.deepamehta.moodle.web_service_url";
-    // private String MOODLE_ITEM = "org.deepamehta.moodle.item";
     private final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
     private static final String DEEPAMEHTA_USERNAME_URI = "dm4.accesscontrol.username";
 
     @Override
     public void run() {
 
-        // 1) Assign new type "Moodle Config" to our default workspace
-        // TopicType moodleConfig = dms.getTopicType(MOODLE_CONFIG);
-        // assignWorkspace(moodleConfig);
-        // 1) create "Twitter Research"-Workspace
+        // 1) create "ISIS / Moodle""-Workspace
         TopicModel workspace = new TopicModel(WS_MOODLE_URI, "dm4.workspaces.workspace");
         Topic ws = dms.createTopic(workspace, null);
         ws.setSimpleValue(MoodleServiceClient.WS_MOODLE_NAME);
@@ -42,12 +37,6 @@ public class Migration2 extends Migration {
         assignToMoodleWorkspace(course);
         AssociationType participant = dms.getAssociationType(MoodleServiceClient.MOODLE_PARTICIPANT_EDGE);
         assignToMoodleWorkspace(participant);
-
-        /** 2) Assign new type "Moodle Item" to our default workspace
-        TopicType moodleItem = dms.getTopicType(MOODLE_ITEM);
-        assignWorkspace(moodleItem); **/
-
-        // moodleItem.getViewConfig().addSetting("dm4.core.view_configuration", "dm4.core.locked", true);
 
     }
 
