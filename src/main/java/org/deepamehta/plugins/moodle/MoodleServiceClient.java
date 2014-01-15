@@ -408,7 +408,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     if (sectionTopic != null) {
                         // Fix Section-ACL-Entries so that "admin" can edit them
                         setDefaultMoodleAdminACLEntries(sectionTopic);
-                        sendClientNotification("New Moodle Section", sectionTopic);
+                        sendClientNotification("New Moodle Section in \"" +
+                                courseTopic.getSimpleValue().toString() + "\"", sectionTopic);
                     }
                 // 2) Update existing \"Moodle section\"
                 } else {
@@ -429,7 +430,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                                 setDefaultMoodleGroupACLEntries(creator_edge);
                             }
                         } else {
-                            updateMoodleItemTopic(itemTopic, item, clientState);
+                            updateMoodleItemTopic(itemTopic, courseTopic, item, clientState);
                         }
                         if (!hasAggregatingSectionParentEdge(itemTopic, sectionTopic)) {
                             createAggregatingSectionEdge(sectionTopic, itemTopic, clientState);
@@ -666,7 +667,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return null;
     }
 
-    private Topic updateMoodleItemTopic(Topic item, JSONObject object, ClientState clientState) {
+    private Topic updateMoodleItemTopic(Topic item, Topic courseTopic, JSONObject object, ClientState clientState) {
         DeepaMehtaTransaction tx = dms.beginTx();
         try {
             // long itemId = object.getLong("id");
@@ -721,7 +722,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             }
             if (update_this) {
                 dms.updateTopic(new TopicModel(item.getId(), model), clientState);
-                sendClientNotification("Changed Moodle Item", item);
+                sendClientNotification("Changed Moodle Item in \""
+                        + courseTopic.getSimpleValue().toString() + "\"", item);
             }
             tx.success();
             return item;
