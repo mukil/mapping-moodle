@@ -102,9 +102,14 @@
 
                         var type = topic.composite['org.deepamehta.moodle.item_type'].value
                         var href = topic.composite['org.deepamehta.moodle.item_href'].value
+                        var description = ""
+                        if (topic.composite.hasOwnProperty('org.deepamehta.moodle.item_description')) {
+                            description = topic.composite['org.deepamehta.moodle.item_description'].value
+                        }
                         render_item_tags(topic)
                         render($('<div class="field-label">Moodle Item (' + type + ')</div>'))
                         render($('<div class="field-item">' + topic.value + '</div>'))
+                        render($('<div class="field-item">' + description + '</div>'))
                         // The following triggers a "Load denied by X-Frame-Options: ../moodle/mod/forum/view.php?id=15
                         // does not permit cross-origin framing."-Error
                         /** render(dm4c.ui.button(function(e) {
@@ -112,11 +117,12 @@
                                 height: dm4c.page_panel.height, frameborder: 0}))
                         }, "View source")) **/
                         //
-                        render($('<div class="field-label">Access source</div>'))
-                        render($('<div class="field-item"><a class="go-to-source" target="_blank" '
-                            + 'href="'+href+'">Open in new window</a></div>'))
-                        // We cannot access this moodle items, should instead render their metadata and insert a button
-                        // allowing to "View in moodle"
+                        if (type !== "label") {
+                            render($('<div class="field-label">Access source</div>'))
+                            render($('<div class="field-item">'
+                                + '<a class="go-to-source" target="_blank" href="' + href + '">Open in new window</a>'
+                                + '</div>'))
+                        }
                         return
                     }
 

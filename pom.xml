@@ -37,11 +37,11 @@
             <artifactId>eduzen-reviews</artifactId>
             <version>0.3.3</version>
         </dependency>
-        <dependency>
+        <!-- <dependency>
             <groupId>de.deepamehta</groupId>
             <artifactId>deepamehta-websockets</artifactId>
             <version>0.2-SNAPSHOT</version>
-        </dependency>
+        </dependency> -->
     </dependencies>
 
     <build>
