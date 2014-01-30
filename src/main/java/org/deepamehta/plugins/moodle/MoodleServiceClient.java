@@ -492,7 +492,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         String queryUrl = endpointUri + "?wstoken=" + key + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT;
         // "&service=" + MOODLE_SERVICE_NAME +
         try {
-            //
+            // Many thanks to Bruno for formulating the following idea/approach at:
+            // http://stackoverflow.com/questions/10267968/error-when-opening-https-url-keycertsign-bit-is-not-set
             TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
             KeyStore ks = KeyStore.getInstance("JKS");
             FileInputStream fis = new FileInputStream(PATH_TO_JAVA_KEYSTORE);
@@ -504,12 +505,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             sslContext.init(null, tmf.getTrustManagers(), null);
             //
             HttpsURLConnection con = (HttpsURLConnection) new URL(queryUrl).openConnection();
-            // Debug Cypher Suites available on this HOST
-            SSLSocketFactory sf = con.getSSLSocketFactory();
-            String[] defaults = sf.getDefaultCipherSuites();
-            for (int i=0; i < defaults.length; i++) {
-                log.info("Available Cypher Suite " + defaults[i]);
-            }
+            con.setSSLSocketFactory(sslContext.getSocketFactory());
             con.setRequestMethod("POST");
             con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
             con.setRequestProperty("Content-Language", "en-US");
@@ -524,18 +520,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 log.info("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
                 throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
             }
-            /**
-            java.security.cert.Certificate[] localCerts = con.getLocalCertificates();
-            java.security.cert.Certificate[] serverCerts = con.getServerCertificates();
-            for (int i=0; i < localCerts.length; i++) {
-                log.info("Local Certificate is of Type " + localCerts[i].getType());
-                log.info("Local Certificate has Public Key " + localCerts[i].getPublicKey());
-            }
-            for (int i=0; i < serverCerts.length; i++) {
-                log.info("Server Certificate is of Type " + serverCerts[i].getType());
-                log.info("Server Certificate has Public Key " + serverCerts[i].getPublicKey());
-            } **/
-            //
             //Get Response
             InputStream is = con.getInputStream();
             BufferedReader rd = new BufferedReader(new InputStreamReader(is));
@@ -556,13 +540,16 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             return response.toString();
         } catch (KeyManagementException ex) {
             log.warning("Moodle KeyManagementException " + ex.getMessage());
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+            throw new RuntimeException(ex);
         } catch (CertificateException ex) {
             log.warning("Moodle CertificatieException " + ex.getMessage());
+            throw new RuntimeException(ex);
         } catch (KeyStoreException ex) {
             log.warning("Moodle KeyStoreException " + ex.getMessage());
+            throw new RuntimeException(ex);
         } catch (NoSuchAlgorithmException ex) {
             log.warning("Moodle Cypher NoSuchAlgorithmException " + ex.getMessage());
+            throw new RuntimeException(ex);
         } catch (MoodleConnectionException ex) {
             log.warning("Moodle ConnectionException " + ex.message + "(" + ex.status + ")");
             throw new MoodleConnectionException(ex.message, ex.status);
@@ -572,7 +559,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     404);
         } catch (IOException ex) {
             log.warning("Moodle I/O Exception .. " + ex.getMessage().toString());
-            throw new MoodleConnectionException("DeepaMehta could not connect to \"" + queryUrl + "\"", 404);
+            throw new MoodleConnectionException("DeepaMehta could not connect to \"" + queryUrl + "\"", 500);
         }
     }
 
