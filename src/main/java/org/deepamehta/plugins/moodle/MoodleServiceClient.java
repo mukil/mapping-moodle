@@ -11,6 +11,7 @@ import de.deepamehta.core.service.Directives;
 import de.deepamehta.core.service.PluginService;
 import de.deepamehta.core.service.ResultList;
 import de.deepamehta.core.service.annotation.ConsumesService;
+import de.deepamehta.core.service.event.AllPluginsActiveListener;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
 import de.deepamehta.plugins.accesscontrol.event.PostLoginUserListener;
@@ -26,10 +27,14 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
+import java.security.Certificate;
 import java.util.Date;
 import java.util.List;
+import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
+import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLSocketFactory;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import org.codehaus.jettison.json.JSONArray;
@@ -49,7 +54,8 @@ import org.codehaus.jettison.json.JSONObject;
  */
 
 @Path("/moodle")
-public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener {
+public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener,
+                                                                    AllPluginsActiveListener {
                                                                     // WebsocketTextMessageListener {
 
     private static Logger log = Logger.getLogger(MoodleServiceClient.class.getName());
@@ -121,6 +127,9 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private final String TAG_URI = "dm4.tags.tag";
     private final String REVIEW_SCORE_URI = "org.deepamehta.reviews.score";
 
+    private final String PATH_TO_JAVA_KEYSTORE = "/home/mre/.keystore";
+    private final String PASS_FOR_JAVA_KEYSTORE = "ff0000";
+
 
     // -------------------------------------------------------------------------------------------------- Public Methods
 
@@ -171,6 +180,16 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     }
 
+    @Override
+    public void allPluginsActive() {
+
+        Properties systemProps = System.getProperties();
+        // systemProps.setProperty("javax.net.ssl.trustStore", PATH_TO_JAVA_KEYSTORE);
+        // systemProps.setProperty("javax.net.ssl.trustStorePassword", PASS_FOR_JAVA_KEYSTORE);
+        log.info("MoodleCheck: Keystore (Trustore) is \"" + systemProps.getProperty("javax.net.ssl.trustStore") +"\"");
+
+    }
+
     /** @Override
     public void websocketTextMessage(String message) {
         log.info("### Receiving message from WebSocket client: \"" + message + "\"");
@@ -217,15 +236,14 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             tx.success();
             return "{ \"result\": \"OK\"}";
         } catch (JSONException ex) {
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+            log.warning("We could not set your moodle user id because of an error while parsing the response "
+                    + ex.getMessage());
             tx.failure();
-            throw new WebApplicationException(new Throwable("Problems reading your payload."), 500);
-        } catch (WebApplicationException wex) {
-            log.info("ERROR: Your Moodle UserId could not be fetched. Your security key must be entered again "
-                + "once your administrator configured a proper service endpoint");
+            return "{ \"result\": \"FAIL\"}";
+        } catch (Exception wex) {
             tx.failure();
-            throw new WebApplicationException(new Throwable("Due to a (remote) configuration error (or missing "
-                    + "internet connection) your security key could not be set."), 500);
+            log.warning("We could not set your moodle user id " + wex.getMessage() + " (" + wex.getCause().toString() + ")");
+            return "{ \"result\": \"FAIL\"}";
         } finally {
             tx.finish();
         }
@@ -335,14 +353,15 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             log.info("Set Moodle User ID => " + userId);
             setMoodleUserId(userAccount, userId);
         } catch (JSONException ex) {
-            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+            log.warning("Moodle JSONException " + ex.getMessage().toString());
             try {
                 JSONObject exception = new JSONObject(data.toString());
-                log.warning("MoodleException: " + exception.getString("message"));
+                log.warning("Unpacked Moodle Exception is \"" + exception.getString("message") +"\"");
             } catch (JSONException ex1) {
-                Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex1);
+                log.warning("Moodle JSONException " + ex.getMessage().toString());
             }
         } catch (MoodleConnectionException mc) {
+            log.warning("MoodleConnectionException \"" + mc.message + "\" (" + mc.status + ")");
             throw new WebApplicationException(mc, mc.status);
         }
         return userAccount;
@@ -470,7 +489,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         String queryUrl = endpointUri + "?wstoken=" + key + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT;
         // "&service=" + MOODLE_SERVICE_NAME +
         try {
-            HttpURLConnection con = (HttpURLConnection) new URL(queryUrl).openConnection();
+            HttpsURLConnection con = (HttpsURLConnection) new URL(queryUrl).openConnection();
+            // Debug Cypher Suites available on this HOST
+            SSLSocketFactory sf = con.getSSLSocketFactory();
+            String[] defaults = sf.getDefaultCipherSuites();
+            for (int i=0; i < defaults.length; i++) {
+                log.info("Available Cypher Suite " + defaults[i]);
+            }
             con.setRequestMethod("POST");
             con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
             con.setRequestProperty("Content-Language", "en-US");
@@ -482,9 +507,21 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             wr.flush();
             wr.close();
             if (con.getResponseCode() != 200) { // this case never occurred to me
-                log.warning("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
+                log.info("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
                 throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
             }
+            /**
+            java.security.cert.Certificate[] localCerts = con.getLocalCertificates();
+            java.security.cert.Certificate[] serverCerts = con.getServerCertificates();
+            for (int i=0; i < localCerts.length; i++) {
+                log.info("Local Certificate is of Type " + localCerts[i].getType());
+                log.info("Local Certificate has Public Key " + localCerts[i].getPublicKey());
+            }
+            for (int i=0; i < serverCerts.length; i++) {
+                log.info("Server Certificate is of Type " + serverCerts[i].getType());
+                log.info("Server Certificate has Public Key " + serverCerts[i].getPublicKey());
+            } **/
+            //
             //Get Response
             InputStream is = con.getInputStream();
             BufferedReader rd = new BufferedReader(new InputStreamReader(is));
@@ -499,16 +536,19 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             if (response.toString().isEmpty()) {
                 String message = "MoodleConnection Response was empty. This happens even if webservice features "
                     + "are completely deactivated or the function is not part of the \"External services\" definition.";
-                log.warning(message);
+                log.info(message);
                 throw new MoodleConnectionException(message, 204);
             }
             return response.toString();
         } catch (MoodleConnectionException ex) {
+            log.warning("Moodle ConnectionException " + ex.message + "(" + ex.status + ")");
             throw new MoodleConnectionException(ex.message, ex.status);
-        } catch (MalformedURLException ml)  {
+        } catch (MalformedURLException ml) {
+            log.warning("Moodle Malformed URL Exception .. " + ml.getMessage().toString());
             throw new MoodleConnectionException("DeepaMehta could not connect to malformed url: \"" + queryUrl + "\"",
                     404);
         } catch (IOException ex) {
+            log.warning("Moodle I/O Exception .. " + ex.getMessage().toString());
             throw new MoodleConnectionException("DeepaMehta could not connect to \"" + queryUrl + "\"", 404);
         }
     }
