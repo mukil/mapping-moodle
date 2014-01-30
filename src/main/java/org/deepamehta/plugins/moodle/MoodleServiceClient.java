@@ -27,14 +27,17 @@ import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.security.Certificate;
+import java.security.*;
+import java.security.cert.CertificateException;
 import java.util.Date;
 import java.util.List;
 import java.util.Properties;
 import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.HttpsURLConnection;
+import javax.net.ssl.SSLContext;
 import javax.net.ssl.SSLSocketFactory;
+import javax.net.ssl.TrustManagerFactory;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
 import org.codehaus.jettison.json.JSONArray;
@@ -127,7 +130,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private final String TAG_URI = "dm4.tags.tag";
     private final String REVIEW_SCORE_URI = "org.deepamehta.reviews.score";
 
-    private final String PATH_TO_JAVA_KEYSTORE = "/home/mre/.keystore";
+    private final String PATH_TO_JAVA_KEYSTORE = "/home/mre/cacerts.jks";
     private final String PASS_FOR_JAVA_KEYSTORE = "ff0000";
 
 
@@ -489,6 +492,17 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         String queryUrl = endpointUri + "?wstoken=" + key + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT;
         // "&service=" + MOODLE_SERVICE_NAME +
         try {
+            //
+            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+            KeyStore ks = KeyStore.getInstance("JKS");
+            FileInputStream fis = new FileInputStream(PATH_TO_JAVA_KEYSTORE);
+            ks.load(fis, PASS_FOR_JAVA_KEYSTORE.toCharArray());
+            fis.close();
+            tmf.init(ks);
+            //
+            SSLContext sslContext = SSLContext.getInstance("TLS");
+            sslContext.init(null, tmf.getTrustManagers(), null);
+            //
             HttpsURLConnection con = (HttpsURLConnection) new URL(queryUrl).openConnection();
             // Debug Cypher Suites available on this HOST
             SSLSocketFactory sf = con.getSSLSocketFactory();
@@ -540,6 +554,15 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 throw new MoodleConnectionException(message, 204);
             }
             return response.toString();
+        } catch (KeyManagementException ex) {
+            log.warning("Moodle KeyManagementException " + ex.getMessage());
+            Logger.getLogger(MoodleServiceClient.class.getName()).log(Level.SEVERE, null, ex);
+        } catch (CertificateException ex) {
+            log.warning("Moodle CertificatieException " + ex.getMessage());
+        } catch (KeyStoreException ex) {
+            log.warning("Moodle KeyStoreException " + ex.getMessage());
+        } catch (NoSuchAlgorithmException ex) {
+            log.warning("Moodle Cypher NoSuchAlgorithmException " + ex.getMessage());
         } catch (MoodleConnectionException ex) {
             log.warning("Moodle ConnectionException " + ex.message + "(" + ex.status + ")");
             throw new MoodleConnectionException(ex.message, ex.status);
