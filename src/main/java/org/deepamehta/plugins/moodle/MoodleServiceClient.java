@@ -6,28 +6,25 @@ import de.deepamehta.core.RelatedTopic;
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.model.*;
 import de.deepamehta.core.osgi.PluginActivator;
-import de.deepamehta.core.service.ClientState;
-import de.deepamehta.core.service.Directives;
-import de.deepamehta.core.service.PluginService;
-import de.deepamehta.core.service.ResultList;
+import de.deepamehta.core.service.*;
 import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.service.event.AllPluginsActiveListener;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
 import de.deepamehta.plugins.accesscontrol.event.PostLoginUserListener;
-import de.deepamehta.core.service.event.PostUpdateTopicListener;
 import de.deepamehta.plugins.accesscontrol.model.ACLEntry;
 import de.deepamehta.plugins.accesscontrol.model.AccessControlList;
 import de.deepamehta.plugins.accesscontrol.model.Operation;
 import de.deepamehta.plugins.accesscontrol.model.UserRole;
 import de.deepamehta.plugins.accesscontrol.service.AccessControlService;
-// import de.deepamehta.plugins.websockets.event.WebsocketTextMessageListener;
-// import de.deepamehta.plugins.websockets.service.WebSocketsService;
 import java.io.*;
 import java.net.HttpURLConnection;
 import java.net.MalformedURLException;
 import java.net.URL;
-import java.security.*;
+import java.security.KeyManagementException;
+import java.security.KeyStore;
+import java.security.KeyStoreException;
+import java.security.NoSuchAlgorithmException;
 import java.security.cert.CertificateException;
 import java.util.Date;
 import java.util.List;
@@ -36,7 +33,6 @@ import java.util.logging.Level;
 import java.util.logging.Logger;
 import javax.net.ssl.HttpsURLConnection;
 import javax.net.ssl.SSLContext;
-import javax.net.ssl.SSLSocketFactory;
 import javax.net.ssl.TrustManagerFactory;
 import javax.ws.rs.*;
 import javax.ws.rs.core.MediaType;
@@ -52,7 +48,7 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.0
+ * @version 1.2.0-SNAPSHOT
  *
  */
 
@@ -98,6 +94,10 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     public static final String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
     public static final String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
 
+    // --- Tagging Notes Plugin URI
+
+    public static final String PLUGIN_URI_TAGGING_NOTES = "org.deepamehta.eduzen-tagging-notes";
+
     // --- Data instance URIs for ISIS 2
 
     public static final String ISIS_COURSE_URI_PREFIX = "de.tu-berlin.course.";
@@ -110,7 +110,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     // The Username eligible to
     // a) edit the moodle service-settings (endpoint) and all other system-created items, as well is allowed to
     // b) set "Tags" on each "Moodle Course" (which is necessary) before they can be synced
-    private final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "Malte";
+    private final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "admin";
     private final String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
     private final String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
     private final String MOODLE_SERVICE_NAME = "eduzen_web_service";
@@ -130,7 +130,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private final String TAG_URI = "dm4.tags.tag";
     private final String REVIEW_SCORE_URI = "org.deepamehta.reviews.score";
 
-    private final String PATH_TO_JAVA_KEYSTORE = "/home/mre/cacerts.jks";
+    private final String PATH_TO_JAVA_KEYSTORE = "";
     private final String PASS_FOR_JAVA_KEYSTORE = "ff0000";
 
 
@@ -189,7 +189,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         Properties systemProps = System.getProperties();
         // systemProps.setProperty("javax.net.ssl.trustStore", PATH_TO_JAVA_KEYSTORE);
         // systemProps.setProperty("javax.net.ssl.trustStorePassword", PASS_FOR_JAVA_KEYSTORE);
-        log.info("MoodleCheck: Keystore (Trustore) is \"" + systemProps.getProperty("javax.net.ssl.trustStore") +"\"");
+        log.info("MoodleCheck: JRE Keystore (Truststore) is at "
+                + "\"" + systemProps.getProperty("javax.net.ssl.trustStore") +"\"");
 
     }
 
@@ -359,7 +360,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             log.warning("Moodle JSONException " + ex.getMessage().toString());
             try {
                 JSONObject exception = new JSONObject(data.toString());
-                log.warning("Unpacked Moodle Exception is \"" + exception.getString("message") +"\"");
+                log.warning("MoodleResponseException is \"" + exception.getString("message") +"\"");
             } catch (JSONException ex1) {
                 log.warning("Moodle JSONException " + ex.getMessage().toString());
             }
@@ -454,7 +455,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                                 // Fix ACL so that all "Moodle"-WS Members can edit these items
                                 setDefaultMoodleGroupACLEntries(itemTopic);
                                 Association creator_edge = assignDefaultAuthorship(itemTopic);
-                                setDefaultMoodleGroupACLEntries(creator_edge);
+                                if (creator_edge != null) setDefaultMoodleGroupACLEntries(creator_edge);
                             }
                         } else {
                             updateMoodleItemTopic(itemTopic, courseTopic, item, clientState);
@@ -492,52 +493,90 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         String queryUrl = endpointUri + "?wstoken=" + key + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT;
         // "&service=" + MOODLE_SERVICE_NAME +
         try {
-            // Many thanks to Bruno for formulating the following idea/approach at:
-            // http://stackoverflow.com/questions/10267968/error-when-opening-https-url-keycertsign-bit-is-not-set
-            TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
-            KeyStore ks = KeyStore.getInstance("JKS");
-            FileInputStream fis = new FileInputStream(PATH_TO_JAVA_KEYSTORE);
-            ks.load(fis, PASS_FOR_JAVA_KEYSTORE.toCharArray());
-            fis.close();
-            tmf.init(ks);
-            //
-            SSLContext sslContext = SSLContext.getInstance("TLS");
-            sslContext.init(null, tmf.getTrustManagers(), null);
-            //
-            HttpsURLConnection con = (HttpsURLConnection) new URL(queryUrl).openConnection();
-            con.setSSLSocketFactory(sslContext.getSocketFactory());
-            con.setRequestMethod("POST");
-            con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
-            con.setRequestProperty("Content-Language", "en-US");
-            con.setDoOutput(true);
-            con.setUseCaches (false);
-            con.setDoInput(true);
-            DataOutputStream wr = new DataOutputStream (con.getOutputStream());
-            wr.writeBytes (params);
-            wr.flush();
-            wr.close();
-            if (con.getResponseCode() != 200) { // this case never occurred to me
-                log.info("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
-                throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
+            if (!PATH_TO_JAVA_KEYSTORE.isEmpty()) {
+                // Many thanks to "Bruno" for formulating the following idea/approach at:
+                // http://stackoverflow.com/questions/10267968/error-when-opening-https-url-keycertsign-bit-is-not-set
+                TrustManagerFactory tmf = TrustManagerFactory.getInstance(TrustManagerFactory.getDefaultAlgorithm());
+                KeyStore ks = KeyStore.getInstance("JKS");
+                FileInputStream fis = new FileInputStream(PATH_TO_JAVA_KEYSTORE);
+                ks.load(fis, PASS_FOR_JAVA_KEYSTORE.toCharArray());
+                fis.close();
+                tmf.init(ks);
+                //
+                SSLContext sslContext = SSLContext.getInstance("TLS");
+                sslContext.init(null, tmf.getTrustManagers(), null);
+                //
+                HttpsURLConnection con = (HttpsURLConnection) new URL(queryUrl).openConnection();
+                con.setSSLSocketFactory(sslContext.getSocketFactory());
+                con.setRequestMethod("POST");
+                con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                con.setRequestProperty("Content-Language", "en-US");
+                con.setDoOutput(true);
+                con.setUseCaches (false);
+                con.setDoInput(true);
+                DataOutputStream wr = new DataOutputStream (con.getOutputStream());
+                wr.writeBytes (params);
+                wr.flush();
+                wr.close();
+                if (con.getResponseCode() != 200) { // this case never occurred to me
+                    log.info("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
+                    throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
+                }
+                // Get Response
+                InputStream is = con.getInputStream();
+                BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+                String line;
+                StringBuilder response = new StringBuilder();
+                while((line = rd.readLine()) != null) {
+                    response.append(line);
+                    response.append('\r');
+                }
+                rd.close();
+                // Handle empty response
+                if (response.toString().isEmpty()) {
+                    String message = "MoodleConnection Response was empty. This happens even if webservice features "
+                        + "are completely deactivated or the function is not part of the \"External services\" definition.";
+                    log.info(message);
+                    throw new MoodleConnectionException(message, 204);
+                }
+                return response.toString();
+            } else {
+                log.warning("The DeepaMehta 4 Moodle Web Service Client cannot establish a HTTPS connection because "
+                        + "it has no valid path to a JKS keystore set. Falling back to HTTP instead.");
+                HttpURLConnection con = (HttpURLConnection) new URL(queryUrl).openConnection();
+                con.setRequestMethod("POST");
+                con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
+                con.setRequestProperty("Content-Language", "en-US");
+                con.setDoOutput(true);
+                con.setUseCaches (false);
+                con.setDoInput(true);
+                DataOutputStream wr = new DataOutputStream (con.getOutputStream());
+                wr.writeBytes (params);
+                wr.flush();
+                wr.close();
+                if (con.getResponseCode() != 200) { // this case never occurred to me
+                    log.warning("MoodleConnection HTTP Status \"" + con.getResponseCode() + "\"");
+                    throw new MoodleConnectionException("MoodleConnection has thrown an error", con.getResponseCode());
+                }
+                //Get Response
+                InputStream is = con.getInputStream();
+                BufferedReader rd = new BufferedReader(new InputStreamReader(is));
+                String line;
+                StringBuilder response = new StringBuilder();
+                while((line = rd.readLine()) != null) {
+                    response.append(line);
+                    response.append('\r');
+                }
+                rd.close();
+                // Handle empty response
+                if (response.toString().isEmpty()) {
+                    String message = "MoodleConnection Response was empty. This happens even if webservice features "
+                        + "are completely deactivated or the function is not part of the \"External services\" definition.";
+                    log.warning(message);
+                    throw new MoodleConnectionException(message, 204);
+                }
+                return response.toString();
             }
-            //Get Response
-            InputStream is = con.getInputStream();
-            BufferedReader rd = new BufferedReader(new InputStreamReader(is));
-            String line;
-            StringBuilder response = new StringBuilder();
-            while((line = rd.readLine()) != null) {
-                response.append(line);
-                response.append('\r');
-            }
-            rd.close();
-            // Handle empty response
-            if (response.toString().isEmpty()) {
-                String message = "MoodleConnection Response was empty. This happens even if webservice features "
-                    + "are completely deactivated or the function is not part of the \"External services\" definition.";
-                log.info(message);
-                throw new MoodleConnectionException(message, 204);
-            }
-            return response.toString();
         } catch (KeyManagementException ex) {
             log.warning("Moodle KeyManagementException " + ex.getMessage());
             throw new RuntimeException(ex);
@@ -1017,14 +1056,22 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     }
 
     private Association assignDefaultAuthorship(Topic item) {
-        Topic author = dms.getTopic("dm4.accesscontrol.username", new SimpleValue(USERNAME_OF_SETTINGS_ADMINISTRATOR), false);
-        // org.deepamehta.tagging-resources - Constants
-        String CREATOR_EDGE_URI = "org.deepamehta.resources.creator_edge";
-        // String CONTRIBUTOR_EDGE_URI = "org.deepamehta.resources.contributor_edge";
-        if (associationExists(CREATOR_EDGE_URI, item, author)) return null;
-        return dms.createAssociation(new AssociationModel(CREATOR_EDGE_URI,
-                new TopicRoleModel(item.getId(), PARENT_URI),
-                new TopicRoleModel(author.getId(), CHILD_URI)), null);
+        try {
+            // 0) Check if eduzen-tagging-notes plugin is available
+            dms.getPlugin(PLUGIN_URI_TAGGING_NOTES);
+            // 1) If eduzen-tagging-nodes plugin is available
+            Topic author = dms.getTopic("dm4.accesscontrol.username", new SimpleValue(USERNAME_OF_SETTINGS_ADMINISTRATOR), false);
+            // org.deepamehta.tagging-resources - Constants
+            String CREATOR_EDGE_URI = "org.deepamehta.resources.creator_edge";
+            // String CONTRIBUTOR_EDGE_URI = "org.deepamehta.resources.contributor_edge";
+            if (associationExists(CREATOR_EDGE_URI, item, author)) return null;
+            return dms.createAssociation(new AssociationModel(CREATOR_EDGE_URI,
+                    new TopicRoleModel(item.getId(), PARENT_URI),
+                    new TopicRoleModel(author.getId(), CHILD_URI)), null);
+        } catch (RuntimeException e) {
+            log.fine("MoodleWebServiceClient assigns no \"Tagging Notes\" (Plugin) Default Authorship");
+            return null;
+        }
     }
 
     private boolean associationExists(String edge_type, Topic item, Topic user) {

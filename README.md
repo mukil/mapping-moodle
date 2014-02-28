@@ -12,7 +12,13 @@ Additionally DeepaMehta allows users to express new relations between moodle ite
 
 A Moodle installation (at least Version 2.4 or higher) is needed with an active "Web Services"-Plugin and the following service definition set up:
 
-The "External Service"-Configuration needs to allow requests to the following 3 functions: 'core_enrol_get_users_courses', 'core_course_get_contents' and 'core_webservice_get_site_info'. The "External service" must also have the option "Can download files" checked, the option "Required capability" set to "No required capability". The data-interchange format must be set to "JSON".
+The "External Service"-Configuration needs to allow requests to the following 3 functions: 
+
+* 'core_enrol_get_users_courses'
+* 'core_course_get_contents'
+* 'core_webservice_get_site_info'. 
+
+The "External service" must also have the option "Can download files" checked, the option "Required capability" set to "No required capability". The data-interchange format must be set to "JSON".
 
 Additonally users must have the capability to "Use REST protocol" and "Create a web service token" to access their "Security Key" under "My profile settings" -> "Security Keys" and pass this on to their DeepaMehta "User Account".
 
@@ -26,6 +32,19 @@ This software is released under the terms of the GNU General Public License in V
 Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 3.0 United States](http://creativecommons.org/licenses/by/3.0/us/) designed by [FatCow Web Hosting](http://www.fatcow.com/).
 
 ## Changelog
+
+1.2-SNAPSHOT
+
+TODO: 
+- Make JKS-Keystore Path configurable, 
+- Write HowTo-Setup JKs Keystore, 
+- Remove ISIS Url, 
+- Make Creator_Edge of Tagging Notes optional (if edge is not in DB) and not (if plugin is not available)
+- Check Timestamp BubbleUp Issue
+
+- Does not reveal intermediary section topic anymore
+- Switched communications to HTTPS
+- Compatible with DeepaMehta 4.2
 
 1.1.2-SNAPSHOT, Nov 12 2013
 

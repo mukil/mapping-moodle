@@ -25,13 +25,13 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
                         name = item.value
                     }
                     // give info-item some behaviour
-                    $listItem = $('<div id="' +item.id+ '">')
-                    $listItem.click(function(e) {
-                        var topicId = this.id
-                        dm4c.do_reveal_related_topic(section.id, "show")
-                        dm4c.do_reveal_related_topic(topicId, "show")
-                    })
-                    $listItem.append('<img src="' + iconSrc + '">' +name)
+                    var $listItem = $('<div id="' +item.id+ '">')
+                        $listItem.click(function(e) {
+                            var topicId = this.id
+                            // dm4c.do_reveal_related_topic(section.id, "show")
+                            dm4c.do_reveal_related_topic(topicId, "show")
+                        })
+                        $listItem.append('<img src="' + iconSrc + '">' +name)
                     // + ' <small>' +new Date(timestamp).toGMTString()+ '</small>'
                     list.append($('<li class="moodle-item">').html($listItem))
                 }
