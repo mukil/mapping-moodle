@@ -207,12 +207,12 @@
             ]
         },
         {
-            "value": "Moodle Item", ### org.deepamehta.resources.resource
+            "value": "Moodle Item",
             "uri": "org.deepamehta.moodle.item",
             "data_type_uri": "dm4.core.composite",
             "assoc_defs": [
                 {
-                    "child_type_uri": "org.deepamehta.moodle.item_name", ### org.deepamehta.resources.resource_name
+                    "child_type_uri": "org.deepamehta.moodle.item_name",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
@@ -240,7 +240,7 @@
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
                 {
-                    "child_type_uri": "org.deepamehta.moodle.item_description", ### org.deepamehta.resources.resource_content
+                    "child_type_uri": "org.deepamehta.moodle.item_description",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
@@ -250,12 +250,12 @@
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
                 {
-                    "child_type_uri": "org.deepamehta.moodle.item_author", ### org.deepamehta.resources.author
+                    "child_type_uri": "org.deepamehta.moodle.item_author",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.composition_def"
                 },
                 {
-                    "child_type_uri": "org.deepamehta.moodle.item_license", #### org.deepamehta.resources.license
+                    "child_type_uri": "org.deepamehta.moodle.item_license",
                     "parent_cardinality_uri": "dm4.core.one",
                     "child_cardinality_uri": "dm4.core.one",
                     "assoc_type_uri": "dm4.core.aggregation_def"
@@ -298,7 +298,6 @@
                     }
                 }
             ]
-            ### Many Renderer URI
         },
         {
             "value": "Moodle Section Name",
@@ -391,7 +390,6 @@
                     }
                 }
             ]
-            ### Many Renderer URI
         },
         {
             "value": "Moodle Course Short Name",
@@ -468,7 +466,7 @@
             ]
         },
         {
-            "value": "Moodle Config: Web Service Endpoint",
+            "value": "Moodle Config: Web Service Endpoint URL",
             "uri": "org.deepamehta.moodle.web_service_url",
             "data_type_uri": "dm4.core.text",
             "view_config_topics": [

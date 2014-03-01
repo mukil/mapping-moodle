@@ -36,12 +36,13 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 1.2-SNAPSHOT
 
 TODO: 
-- Make JKS-Keystore Path configurable, 
-- Write HowTo-Setup JKs Keystore, 
-- Remove ISIS Url, 
+- Secure JKS-Passsword
 - Make Creator_Edge of Tagging Notes optional (if edge is not in DB) and not (if plugin is not available)
-- Check Timestamp BubbleUp Issue
+- Make Workspace Name editable (Bug)
 
+DONE:
+- Removed ClientState completely
+- Introduced new options to configure the Moodle HTTP Client via GUI
 - Does not reveal intermediary section topic anymore
 - Switched communications to HTTPS
 - Compatible with DeepaMehta 4.2

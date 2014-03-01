@@ -1,0 +1,42 @@
+{
+    "topic_types": [
+        {
+            "value": "Moodle Config: Web Service Client Option",
+            "uri": "org.deepamehta.moodle.web_service_client_option",
+            "data_type_uri": "dm4.core.text",
+            "view_config_topics": [
+                {
+                    "type_uri": "dm4.webclient.view_config",
+                    "composite": {
+                        "dm4.webclient.icon": "/org.deepamehta.moodle-plugin/images/mlogo_60.png",
+                        "dm4.webclient.show_in_create_menu": false,
+                        "dm4.webclient.searchable_as_unit": true,
+                        "dm4.webclient.rows": 1
+                    }
+                }
+            ]
+        }
+    ],
+    "topics": [
+        {
+            "value"     : "http://localhost/moodle/webservice/rest/server.php",
+            "uri" : "org.deepamehta.moodle.web_service_endpoint_url",
+            "type_uri" : "org.deepamehta.moodle.web_service_client_option"
+        },
+        {
+            "value": "false",
+            "uri": "org.deepamehta.moodle.use_https",
+            "type_uri" : "org.deepamehta.moodle.web_service_client_option"
+        },
+        {
+            "value": "",
+            "uri": "org.deepamehta.moodle.jks_path",
+            "type_uri" : "org.deepamehta.moodle.web_service_client_option"
+        },
+        {
+            "value" : "",
+            "uri" : "org.deepamehta.moodle.jks_pass",
+            "type_uri" : "org.deepamehta.moodle.web_service_client_option"
+        }
+    ]
+}
