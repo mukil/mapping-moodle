@@ -19,7 +19,7 @@
     ],
     "topics": [
         {
-            "value"     : "http://localhost/moodle/webservice/rest/server.php",
+            "value" : "https://www.isis.tu-berlin.de/2.0/webservice/rest/server.php",
             "uri" : "org.deepamehta.moodle.web_service_endpoint_url",
             "type_uri" : "org.deepamehta.moodle.web_service_client_option"
         },
@@ -29,12 +29,12 @@
             "type_uri" : "org.deepamehta.moodle.web_service_client_option"
         },
         {
-            "value": "",
+            "value": "<jks-path>",
             "uri": "org.deepamehta.moodle.jks_path",
             "type_uri" : "org.deepamehta.moodle.web_service_client_option"
         },
         {
-            "value" : "",
+            "value" : "<jks-pass>",
             "uri" : "org.deepamehta.moodle.jks_pass",
             "type_uri" : "org.deepamehta.moodle.web_service_client_option"
         }

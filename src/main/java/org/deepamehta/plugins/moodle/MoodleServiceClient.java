@@ -112,7 +112,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     // The Username eligible to
     // a) edit the moodle service-settings (endpoint) and all other system-created items, as well is allowed to
     // b) set "Tags" on each "Moodle Course" (which is necessary) before they can be synced
-    private final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "admin";
+    private final String USERNAME_OF_SETTINGS_ADMINISTRATOR = "Malte";
     private final String MOODLE_SECURITY_KEY_URI = "org.deepamehta.moodle.security_key";
     private final String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
     private final String MOODLE_SERVICE_NAME = "eduzen_web_service";
@@ -148,8 +148,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             // 2) Correct ACL of topics in migration4
             ResultList<RelatedTopic> client_options = dms.getTopics("org.deepamehta.moodle.web_service_client_option",
                     false, 0);
-            for (RelatedTopic option : client_options) {
-                setDefaultMoodleAdminACLEntries(option);
+            for (RelatedTopic client_option : client_options) {
+                setDefaultMoodleAdminACLEntries(client_option);
             }
         }
     }

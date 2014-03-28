@@ -119,7 +119,7 @@
 
         })
 
-        var ws = new WebSocket("ws://localhost:8081", "org.deepamehta.moodle-plugin")
+        /** var ws = new WebSocket("ws://localhost:8081", "org.deepamehta.moodle-plugin")
 
         ws.onopen = function(e) {
             console.log("Opening WebSocket connection to " + e.target.url, e)
@@ -157,7 +157,7 @@
             $notification.fadeIn(2500, function () {
                 $(this).delay(5000).fadeOut(2500)
             })
-        }
+        } **/
 
         // show_notification("Changed Moodle Item", {value : "Mein Name ist..", id: 1})
         // show_notification("New Moodle Item", {value : "Mein Name ist..", id: 2})
