@@ -972,7 +972,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     private boolean isHTTPSConfigured() {
         Topic string_opt = dms.getTopic("uri", new SimpleValue(CLIENT_OPTION_USE_HTTPS), true);
-        if (string_opt.getSimpleValue().equals("true") || string_opt.getSimpleValue().equals("True")) return true;
+        if (string_opt.getSimpleValue().toString().equals("true") || string_opt.getSimpleValue().toString().equals("True")) return true;
         return false;
     }
 
