@@ -33,19 +33,19 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 
 ## Changelog
 
-1.2-SNAPSHOT
+1.2, Apr 4, 2014
 
-TODO: 
-- Secure JKS-Passsword
-- Make Creator_Edge of Tagging Notes optional (if edge is not in DB) and not (if plugin is not available)
-- Make Workspace Name editable (Bug)
-
-DONE:
-- Removed ClientState completely
 - Introduced new options to configure the Moodle HTTP Client via GUI
-- Does not reveal intermediary section topic anymore
-- Switched communications to HTTPS
+- Do not reveal intermediary section topic anymore
+- Allowing communications to HTTPS
 - Compatible with DeepaMehta 4.2
+- Background-Synchronization Thread
+- Synchronization builds on the new postLogin()-DM4 Hook
+- Improved Moodle Item update detection
+
+Known Issue:
+- JKS-Passsword and Username are stored insecure
+- DeepaMehta 4 Tags and org.deepamehta-Reviews plugin are requirements
 
 1.1.2-SNAPSHOT, Nov 12 2013
 

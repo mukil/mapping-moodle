@@ -6,7 +6,9 @@ import de.deepamehta.core.RelatedTopic;
 import de.deepamehta.core.Topic;
 import de.deepamehta.core.model.*;
 import de.deepamehta.core.osgi.PluginActivator;
-import de.deepamehta.core.service.*;
+import de.deepamehta.core.service.Directives;
+import de.deepamehta.core.service.PluginService;
+import de.deepamehta.core.service.ResultList;
 import de.deepamehta.core.service.annotation.ConsumesService;
 import de.deepamehta.core.service.event.AllPluginsActiveListener;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
@@ -48,21 +50,20 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.0-SNAPSHOT
+ * @version 1.2.0
  *
  */
 
 @Path("/moodle")
 public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener,
                                                                     AllPluginsActiveListener {
-                                                                    // WebsocketTextMessageListener {
 
     private static Logger log = Logger.getLogger(MoodleServiceClient.class.getName());
 
     // ---------------------------------------------------------------------------------------------- Instance Variables
 
+    // ### Consume NotifcationService
     private AccessControlService aclService;
-    // private WebSocketsService webSocketsService;
 
     // --- URIs DeepaMehta and all plugins in use
 
@@ -162,23 +163,14 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         if (service instanceof AccessControlService) {
             aclService = (AccessControlService) service;
         }
-        /** else if (service instanceof WebSocketsService) {
-            webSocketsService = (WebSocketsService) service;
-        } **/
     }
 
     @Override
     public void serviceGone(PluginService service) {
         if (service instanceof AccessControlService) {
             aclService = null;
-        } /** else if (service instanceof WebSocketsService) {
-            webSocketsService = null;
-        } */
+        }
     }
-
-    // --
-    // --- Listener Implementations
-    // --
 
     @Override
     public void postLoginUser(String username) {
@@ -198,27 +190,11 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     }
 
-    /** @Override
-    public void websocketTextMessage(String message) {
-        log.info("### Receiving message from WebSocket client: \"" + message + "\"");
 
-    }
 
-    private void sendClientNotification(String message, Topic topic) {
-        if (webSocketsService != null) {
-            JSONObject banana = new JSONObject();
-            try {
-                banana.put("message", message);
-                banana.put("topic", topic.toJSON());
-                webSocketsService.broadcast(getUri(), banana.toString());
-            } catch (JSONException j) {
-                log.warning("Problems with sending stupid message to all clients.");
-            }
-        } else {
-            log.warning("MoodleServiceClient.webSocketService is suddenly GONE!");
-        }
-    } **/
-
+    // --
+    // --- Moodle Plugin Implementation
+    // --
 
     /** Relates the moodle-security-key to our currently logged-in user-account. **/
     @POST
