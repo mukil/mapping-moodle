@@ -3,7 +3,7 @@
 
 A webservice client based on [DeepaMehta 4](https://www.deepamehta.de/) enabling users to *map* [Moodle](http://download.moodle.org/) courses in collaboration.
 
-Where with *mapping* I mean *free placement* of items on an infinite canvas to create structured visualizations representing *personal views* on "Materials" and "Activities" of many "Courses". The DeepaMehta user interface facilitates research activities such as *active reading* as well as *communication* and *collaboration* with fellow learners.
+Where with *mapping* we refer to *free placement* of items on an *infinite canvas* to create *structured visualizations* representing *personal views* on "Materials" and "Activities" of many "Courses". The DeepaMehta user interface facilitates research activities such as *active reading* as well as *communication* and *collaboration* with fellow learners.
 
 Additionally DeepaMehta allows users to express new relations between moodle items and thus the creation of *visible* and *navigatable* paths for fellow users. Furthermore it allows users to read materials (such as PDFs) on demand at the right side of the screen while maintaining a visual working context on the left side of the screen.
 
@@ -32,6 +32,10 @@ This software is released under the terms of the GNU General Public License in V
 Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 3.0 United States](http://creativecommons.org/licenses/by/3.0/us/) designed by [FatCow Web Hosting](http://www.fatcow.com/).
 
 ## Changelog
+
+1.3, UPCOMING
+
+- A moodle course can be synced under many 'tags'
 
 1.2, Apr 4, 2014
 

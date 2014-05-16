@@ -50,7 +50,7 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.0
+ * @version 1.2.1-SNAPSHOT
  *
  */
 
@@ -312,10 +312,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     course.loadChildTopics(TAG_URI);
                     if (course.getCompositeValue().has(TAG_URI) &&
                         course.getCompositeValue().getTopics(TAG_URI).size() > 0) {
-                        Topic courseHashtag = course.getCompositeValue().getTopics(TAG_URI).get(0);
-                        log.info("MoodleServiceClient SYNC course \"" + course.getSimpleValue() +
-                                "\" under tag #" + courseHashtag.getSimpleValue());
-                        getCourseContentsWithoutAuth(course.getId(), key, courseHashtag);
+                        List<Topic> courseHashtags = course.getCompositeValue().getTopics(TAG_URI);
+                        log.info("MoodleServiceClient SYNC course \"" + course.getSimpleValue() +"\" "
+                                + "under " +courseHashtags.size() + " hashtags:");
+                        for (Topic hashtag : courseHashtags) {
+                            log.info("\t#" + hashtag.getSimpleValue());
+                        }
+                        getCourseContentsWithoutAuth(course.getId(), key, courseHashtags);
                     } else {
                         log.info("MoodleServiceClient waiting with SYNC cause of missing #Hashtag (on \""
                                 + course.getSimpleValue() + "\")");
@@ -400,7 +403,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         }
     }
 
-    private Topic getCourseContentsWithoutAuth(long topicId, String token, Topic hashtag) {
+    private Topic getCourseContentsWithoutAuth(long topicId, String token, List<Topic> hashtags) {
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId, true);
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
@@ -432,7 +435,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                         JSONObject item = modules.getJSONObject(k);
                         Topic itemTopic = getMoodleItemTopic(item.getLong("id"));
                         if (itemTopic == null) {
-                            itemTopic = createMoodleItemTopic(item, hashtag);
+                            itemTopic = createMoodleItemTopic(item, hashtags);
                             if (itemTopic != null) {
                                 // Fix ACL so that all "Moodle"-WS Members can edit these items
                                 setDefaultMoodleGroupACLEntries(itemTopic);
@@ -696,7 +699,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return null;
     }
 
-    private Topic createMoodleItemTopic(JSONObject object, Topic hashtag) {
+    private Topic createMoodleItemTopic(JSONObject object, List<Topic> hashtags) {
         DeepaMehtaTransaction tx = dms.beginTx();
         try {
             // 0) Checki if given moodle item is actually "hidden" and if not remember moodle-id
@@ -719,7 +722,9 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 parseTimestampsToItemModel(model, object);
             }
             // 4) equip every moodle item with the courses default hashtag
-            model.addRef(TAG_URI, hashtag.getId());
+            for (Topic hashtag : hashtags) {
+                model.addRef(TAG_URI, hashtag.getId());
+            }
             // 5) construct our internal uri for any moodl item
             TopicModel item = new TopicModel(ISIS_ITEM_URI_PREFIX + itemId, MOODLE_ITEM_URI, model);
             Topic result = dms.createTopic(item, null);
