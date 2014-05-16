@@ -721,7 +721,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 // 3) equip any other item with default timestamps (or the timestamps of the object, not resource)
                 parseTimestampsToItemModel(model, object);
             }
-            // 4) equip every moodle item with the courses default hashtag
+            // 4) equip moodle item with every hashtag set on the course
             for (Topic hashtag : hashtags) {
                 model.addRef(TAG_URI, hashtag.getId());
             }
