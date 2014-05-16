@@ -33,7 +33,7 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 
 ## Changelog
 
-1.3, UPCOMING
+1.2.1, UPCOMING
 
 - A moodle course can be synced under many 'tags'
 
