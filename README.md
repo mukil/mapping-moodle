@@ -1,7 +1,7 @@
 
-# Mapping Moodle
+# DeepaMehta 4 Mapping Moodle Module
 
-A webservice client based on [DeepaMehta 4](https://www.deepamehta.de/) enabling users to *map* [Moodle](http://download.moodle.org/) courses in collaboration.
+A webservice client based on [DeepaMehta 4](https://www.deepamehta.de/) enabling users to *map* [Moodle](http://download.moodle.org/) courses and their work materials in collaboration.
 
 Where with *mapping* we refer to *free placement* of items on an *infinite canvas* to create *structured visualizations* representing *personal views* on "Materials" and "Activities" of many "Courses". The DeepaMehta user interface facilitates research activities such as *active reading* as well as *communication* and *collaboration* with fellow learners.
 
@@ -37,6 +37,11 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 
 - A moodle course can be synced under many 'tags'
 
+Known Issue:
+- JKS-Passsword and Username are stored insecure
+- DeepaMehta 4 Tags and org.deepamehta-Reviews plugin are requirements
+
+
 1.2, Apr 4, 2014
 
 - Introduced new options to configure the Moodle HTTP Client via GUI
@@ -46,10 +51,6 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 - Background-Synchronization Thread
 - Synchronization builds on the new postLogin()-DM4 Hook
 - Improved Moodle Item update detection
-
-Known Issue:
-- JKS-Passsword and Username are stored insecure
-- DeepaMehta 4 Tags and org.deepamehta-Reviews plugin are requirements
 
 1.1.2-SNAPSHOT, Nov 12 2013
 
@@ -67,7 +68,7 @@ Fixes:
 - Sorting of "Moodle sections" in DMs "Page panel" is now correct
 - Moodle User Id is requested automatically (always when a security key is set)
 
-Know Issues:
+Known Issues:
 - Materials & Activities which are "hidden" in Moodle appear in DeepaMehta
 - Updating items is not yet implemented
 
@@ -76,4 +77,7 @@ Know Issues:
 
 - A basically functional proof-of-system. 
   (see commit message for set-up instructions)
+
+-------------------------------
+Author: Malte Reißig, 2013-2014
 
