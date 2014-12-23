@@ -329,7 +329,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     }
 
     /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
-    private Topic fetchAndSetMoodleUserId(Topic userAccount) throws WebApplicationException {
+    private void fetchAndSetMoodleUserId(Topic userAccount) throws WebApplicationException {
 
         String token = getMoodleSecurityKeyWithoutAuthCheck(userAccount);
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
@@ -347,16 +347,15 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 JSONObject exception = new JSONObject(data.toString());
                 log.warning("MoodleResponseException is \"" + exception.getString("message") +"\"");
             } catch (JSONException ex1) {
-                log.warning("Moodle JSONException " + ex.getMessage().toString());
+                throw new RuntimeException(ex1);
             }
         } catch (MoodleConnectionException mc) {
             log.warning("MoodleConnectionException \"" + mc.message + "\" (" + mc.status + ")");
             throw new WebApplicationException(mc, mc.status);
         }
-        return userAccount;
     }
 
-    private Topic getMoodleCoursesWithoutAuth(Topic userAccount, long moodleUserId, String token) {
+    private void getMoodleCoursesWithoutAuth(Topic userAccount, long moodleUserId, String token) {
         String parameter = "userid=" + moodleUserId;
         String data = "";
         try {
@@ -395,11 +394,11 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 JSONObject response = new JSONObject(data.toString());
                 String exception = response.getString("exception");
                 throw new WebApplicationException(new MoodleConnectionException(exception, 500), 500);
-            } catch (JSONException ex1) {}
+            } catch (JSONException ex1) {
+                throw new RuntimeException(ex1);
+            }
         } catch (MoodleConnectionException mc) {
             throw new WebApplicationException(new Throwable(mc.message), mc.status);
-        } finally {
-            return userAccount;
         }
     }
 
