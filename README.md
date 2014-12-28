@@ -1,16 +1,18 @@
 
 # DeepaMehta 4 Mapping Moodle Module
 
-A webservice client based on [DeepaMehta 4](https://www.deepamehta.de/) enabling users to *map* [Moodle](http://download.moodle.org/) courses and their work materials in collaboration.
+A webservice client based on [DeepaMehta 4](https://www.deepamehta.de/) enabling users to *map* [Moodle](http://download.moodle.org/) courses and their work materials in collaboration. 
 
-Where with *mapping* we refer to *free placement* of items on an *infinite canvas* to create *structured visualizations* representing *personal views* on "Materials" and "Activities" of many "Courses". The DeepaMehta user interface facilitates research activities such as *active reading* as well as *communication* and *collaboration* with fellow learners.
+This web service client uses the "Users as clients with token" option to authorize requests on behalf of certain users (as described on the "Web servcies" > "Overview" page in your moodle installation.
+
+With *mapping* we mean *free placement* of items on an *infinite canvas* to create *structured visualizations* representing *personal views* on "Resources" and "Activities" of many "Courses". The DeepaMehta user interface facilitates research activities such as *active reading* as well as *communication* and *collaboration* with fellow learners.
 
 Additionally DeepaMehta allows users to express new relations between moodle items and thus the creation of *visible* and *navigatable* paths for fellow users. Furthermore it allows users to read materials (such as PDFs) on demand at the right side of the screen while maintaining a visual working context on the left side of the screen.
 
 
-# Usage Requirements
+# Usage & Setup
 
-A Moodle installation (at least Version 2.4 or higher) is needed with an active "Web Services"-Plugin and the following service definition set up:
+A Moodle installation (at least Version 2.4 or higher) is needed with an active "Web Services"-Plugin (see "Advanced Features") and the following service definition set up.
 
 The "External Service"-Configuration needs to allow requests to the following 3 functions: 
 
@@ -18,10 +20,16 @@ The "External Service"-Configuration needs to allow requests to the following 3 
 * 'core_course_get_contents'
 * 'core_webservice_get_site_info'. 
 
-The "External service" must also have the option "Can download files" checked, the option "Required capability" set to "No required capability". The data-interchange format must be set to "JSON".
+The "External service" must also have the option "Can download files" checked, the option "Required capability" set to "No required capability". For Moodle versions 2.4 the data-interchange format must explicitly be set to "JSON".
 
-Additonally users must have the capability to "Use REST protocol" and "Create a web service token" to access their "Security Key" under "My profile settings" -> "Security Keys" and pass this on to their DeepaMehta "User Account".
+To be able to connect the Topicmap UI on their behalf users must have the capabilities to 
 
+* "Use REST protocol" and 
+* "Create a web service token" 
+
+so they can access their "Security Key" via "My profile settings" -> "Security Keys". This secret key needs to be passed on to their DeepaMehta "User Account".
+
+The best way (I could figure out) to grant these capabilities in Moodle is to create a new role under "Site administration" > "Users" > "Permissions" > "Define roles" > "Add new role". Set role archetype to "None" and context of role to "System". Finally, add the two above mentioned permissions to this role and click "Create this role".
 
 ## GNU Public License
 
@@ -35,12 +43,13 @@ Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 
 
 1.2.1, UPCOMING
 
+- Tested against Moodle 2.8
 - A moodle course can be synced under many 'tags'
+- Compatible with DeepaMehta 4.4
 
 Known Issue:
 - JKS-Passsword and Username are stored insecure
 - DeepaMehta 4 Tags and org.deepamehta-Reviews plugin are requirements
-
 
 1.2, Apr 4, 2014
 

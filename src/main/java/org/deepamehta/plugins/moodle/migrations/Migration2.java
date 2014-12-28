@@ -15,7 +15,7 @@ public class Migration2 extends Migration {
 
     private Logger logger = Logger.getLogger(getClass().getName());
 
-    private final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
+    private static final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
     private static final String DEEPAMEHTA_USERNAME_URI = "dm4.accesscontrol.username";
 
     @Override
@@ -23,10 +23,10 @@ public class Migration2 extends Migration {
 
         // 1) create "ISIS / Moodle""-Workspace
         TopicModel workspace = new TopicModel(WS_MOODLE_URI, "dm4.workspaces.workspace");
-        Topic ws = dms.createTopic(workspace, null);
+        Topic ws = dms.createTopic(workspace);
         ws.setSimpleValue(MoodleServiceClient.WS_MOODLE_NAME);
         // 2) assign "admin" username to "Moodle"-Workspace
-        Topic administrator = dms.getTopic(DEEPAMEHTA_USERNAME_URI, new SimpleValue("admin"), true);
+        Topic administrator = dms.getTopic(DEEPAMEHTA_USERNAME_URI, new SimpleValue("admin"));
         assignToMoodleWorkspace(administrator);
         // 3) Assign some of our types to the "Moodle"-Workspace
         TopicType item = dms.getTopicType(MoodleServiceClient.MOODLE_ITEM_URI);
@@ -46,16 +46,16 @@ public class Migration2 extends Migration {
         if (hasAnyWorkspace(topic)) {
             return;
         }
-        Topic defaultWorkspace = dms.getTopic("uri", new SimpleValue(WS_MOODLE_URI), false);
+        Topic defaultWorkspace = dms.getTopic("uri", new SimpleValue(WS_MOODLE_URI));
         dms.createAssociation(new AssociationModel("dm4.core.aggregation",
             new TopicRoleModel(topic.getId(), "dm4.core.parent"),
             new TopicRoleModel(defaultWorkspace.getId(), "dm4.core.child")
-        ), null);
+        ));
     }
 
     private boolean hasAnyWorkspace(Topic topic) {
         return topic.getRelatedTopics("dm4.core.aggregation", "dm4.core.parent", "dm4.core.child",
-            "dm4.workspaces.workspace", false, false, 0).getSize() > 0;
+            "dm4.workspaces.workspace", 0).getSize() > 0;
     }
 
 }

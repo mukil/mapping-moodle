@@ -39,24 +39,24 @@
                     // Render Moodle Item Page ..
                     empty_page() // workaround when deep links are used cause render_info is then called twice
 
-                    if (topic.composite['org.deepamehta.moodle.item_type'].value === "file" ||
-                        topic.composite['org.deepamehta.moodle.item_type'].value === "url") {
+                    if (topic.childs['org.deepamehta.moodle.item_type'].value === "file" ||
+                        topic.childs['org.deepamehta.moodle.item_type'].value === "url") {
 
                         render_item_tags(topic)
                         render($('<div class="field-label moodle-item">Moodle Item</div>'))
 
-                        var remote_resource = topic.composite['org.deepamehta.moodle.item_url'].value
+                        var remote_resource = topic.childs['org.deepamehta.moodle.item_url'].value
 
                         // .. with a moodle webresource-item
-                        if (topic.composite['org.deepamehta.moodle.item_type'].value === "url") {
+                        if (topic.childs['org.deepamehta.moodle.item_type'].value === "url") {
 
                             render($("<iframe>").attr({src: remote_resource, width: "99%",
                                     height: dm4c.page_panel.height, frameborder: 0}))
 
                         // .. with a moodle file-item
-                        } else if (topic.composite['org.deepamehta.moodle.item_type'].value === "file") {
+                        } else if (topic.childs['org.deepamehta.moodle.item_type'].value === "file") {
 
-                            var media_type = topic.composite['org.deepamehta.moodle.item_media_type'].value
+                            var media_type = topic.childs['org.deepamehta.moodle.item_media_type'].value
                                 remote_resource = remote_resource + "&token=" + token
 
                             if (media_type) {
@@ -100,11 +100,11 @@
                     // .. with a unsupported type of "Moodle item"
                     } else {
 
-                        var type = topic.composite['org.deepamehta.moodle.item_type'].value
-                        var href = topic.composite['org.deepamehta.moodle.item_href'].value
+                        var type = topic.childs['org.deepamehta.moodle.item_type'].value
+                        var href = topic.childs['org.deepamehta.moodle.item_href'].value
                         var description = ""
-                        if (topic.composite.hasOwnProperty('org.deepamehta.moodle.item_description')) {
-                            description = topic.composite['org.deepamehta.moodle.item_description'].value
+                        if (topic.childs.hasOwnProperty('org.deepamehta.moodle.item_description')) {
+                            description = topic.childs['org.deepamehta.moodle.item_description'].value
                         }
                         render_item_tags(topic)
                         render($('<div class="field-label">Moodle Item (' + type + ')</div>'))
@@ -137,12 +137,12 @@
 
             function render_item_tags(topic) {
 
-                if (typeof topic.composite['dm4.tags.tag'] !== "undefined") {
+                if (typeof topic.childs['dm4.tags.tag'] !== "undefined") {
                     //
                     render($('<div class="field-label">Tags</div>'))
-                    if (topic.composite['dm4.tags.tag'].length > 0) {
-                        for (var tag_index in topic.composite['dm4.tags.tag']) {
-                            var tag = topic.composite['dm4.tags.tag'][tag_index]
+                    if (topic.childs['dm4.tags.tag'].length > 0) {
+                        for (var tag_index in topic.childs['dm4.tags.tag']) {
+                            var tag = topic.childs['dm4.tags.tag'][tag_index]
                             var $tag_view = $('<div class="tag-item-view" id="'+tag.id+'" title="Show tag: '+tag.value+'">'
                                 + '<img alt="Tag icon" src="/de.deepamehta.tags/images/tag_32.png" width="20">'
                                 + '<span class="tag-name">' + tag.value + '</span>')
@@ -169,7 +169,7 @@
 
             // note: The following code is a page_renderer adaptation of the `dm4-tags` multi_renderer implementation
 
-            var existingTags = topic.composite['dm4.tags.tag']
+            var existingTags = topic.childs['dm4.tags.tag']
             var allAvailableTags = getAllAvailableTags()
             var inputValue = ""
             var commaCount = 1
@@ -195,7 +195,7 @@
                 for (var label in enteredTags) {
                     var name = enteredTags[label]
                     var tag = getLabelContained(name, allAvailableTags)
-                    if (tag == undefined) {
+                    if (typeof tag === "undefined") {
                         var newTag = dm4c.create_topic(TAG_URI, {"dm4.tags.label": name, "dm4.tags.definition" : ""})
                         tagsToReference.push(newTag)
                     } else {
@@ -207,7 +207,7 @@
                 for (var existingTag in existingTags) {
                     var element = existingTags[existingTag].value // this differs here from multi_renderer (no .object)
                     var elementId = existingTags[existingTag].id // this differs here from multi_renderer (no .object)
-                    if (getLabelContained(element, tagsToReference) == undefined) {
+                    if (typeof getLabelContained(element, tagsToReference) === "undefined") {
                         tags.push( dm4c.DEL_PREFIX + elementId ) // not tags.push({"id" : dm4c.DEL_PREFIX + elementId})
                     }
                 }
@@ -215,13 +215,13 @@
                 // 2) returning reference all new and existing tags
                 for (var item in tagsToReference) {
                     var topic_id = tagsToReference[item].id
-                    if (topic_id != -1) {
+                    if (topic_id !== -1) {
                         tags.push( dm4c.REF_PREFIX + topic_id ) // not tags.push({"id" : dm4c.REF_PREFIX + topic_id})
                     }
                 }
 
                 // 3) assemble new topic model
-                topic.composite['dm4.tags.tag'] = tags
+                topic.childs['dm4.tags.tag'] = tags
                 // where this array contents simply look like this (no json-objects to be constructed)
                 // [ "del_id:40190", "ref_id:51291", "ref_id:51131", "ref_id:11318"]
                 // 4) this call is needed when implementing page_renderers
@@ -279,9 +279,9 @@
             }
 
             function getTagsSubmitted (fieldIdentifier) {
-                if ($(fieldIdentifier).val() == undefined) return undefined
+                if (typeof $(fieldIdentifier).val() === "undefined") return undefined
                 var tagline = $(fieldIdentifier).val().split( /,\s*/ )
-                if (tagline == undefined) throw new Error("Tagging field got somehow broken.. ")
+                if (typeof tagline === "undefined") throw new Error("Tagging field got somehow broken.. ")
                 var qualifiedTags = []
                 for (var i=0; i < tagline.length; i++) {
                     var tag = tagline[i]

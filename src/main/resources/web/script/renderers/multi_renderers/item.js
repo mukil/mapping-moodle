@@ -8,17 +8,17 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
         var list = $('<ul class="moodle-items">')
         for (var i = 0; i < page_models.length; i++) {
             //
-            var section = page_models[i].parent.object
+            // var section = page_models[i].parent.object
             var item = page_models[i].object
-            if (item != undefined) {
-                if (item.id != -1) {
+            if (typeof item !== "undefined") {
+                if (item.id !== -1) {
                     /** var url = ""
-                    if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_href')) {
-                        url = item.composite['org.deepamehta.moodle.item_href'].value
+                    if (item.childs.hasOwnProperty('org.deepamehta.moodle.item_href')) {
+                        url = item.childs['org.deepamehta.moodle.item_href'].value
                     } **/
                     var iconSrc = ""
-                    if (item.composite.hasOwnProperty('org.deepamehta.moodle.item_icon')) {
-                        iconSrc = item.composite['org.deepamehta.moodle.item_icon'].value
+                    if (item.childs.hasOwnProperty('org.deepamehta.moodle.item_icon')) {
+                        iconSrc = item.childs['org.deepamehta.moodle.item_icon'].value
                     }
                     var name = ""
                     if (item.hasOwnProperty('value')) {
@@ -50,7 +50,7 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.item_multi_renderer', {
             // returning (and referencing) all previously aggregated items back in our submit-function
             for (var item in page_models) {
                 var topic_id = page_models[item].object.id
-                if (topic_id != -1) {
+                if (topic_id !== -1) {
                     values.push(dm4c.REF_PREFIX + topic_id)
                 }
             }

@@ -5,8 +5,8 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.section_multi_renderer', {
 
         page_models.sort(function sort_by_date_title(a, b) {
 
-            var timeA =  a.object.composite['org.deepamehta.moodle.section_ordinal_nr'].value
-            var timeB =  b.object.composite['org.deepamehta.moodle.section_ordinal_nr'].value
+            var timeA =  a.object.childs['org.deepamehta.moodle.section_ordinal_nr'].value
+            var timeB =  b.object.childs['org.deepamehta.moodle.section_ordinal_nr'].value
             //
             if (timeA > timeB) return 1
             if (timeA < timeB) return -1
@@ -30,7 +30,7 @@ dm4c.add_multi_renderer('org.deepamehta.moodle.section_multi_renderer', {
             // returning (and referencing) all previously aggregated items back in our submit-function
             for (var item in page_models) {
                 var topic_id = page_models[item].object.id
-                if (topic_id != -1) {
+                if (topic_id !== -1) {
                     values.push(dm4c.REF_PREFIX + topic_id)
                 }
             }
