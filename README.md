@@ -31,6 +31,11 @@ so they can access their "Security Key" via "My profile settings" -> "Security K
 
 The best way (I could figure out) to grant these capabilities in Moodle is to create a new role under "Site administration" > "Users" > "Permissions" > "Define roles" > "Add new role". Set role archetype to "None" and context of role to "System". Finally, add the two above mentioned permissions to this role and click "Create this role".
 
+   Note: Just "Moodle Course"-Topics with a given "Tag" are synchronized. 
+   That's the current "editorial workflow" to 
+   (I) not syncronize all courses on first contact and 
+   (II) map all items of each course automatically under a unique label (Tag).
+
 ## GNU Public License
 
 This software is released under the terms of the GNU General Public License in Version 3.0, 2007.
@@ -39,9 +44,17 @@ This software is released under the terms of the GNU General Public License in V
 
 Moodle "Item" and "Section" icon are both under [Creative Commons - Attribution 3.0 United States](http://creativecommons.org/licenses/by/3.0/us/) designed by [FatCow Web Hosting](http://www.fatcow.com/).
 
+## Ideas & Possibilities
+
+As of Moodle 2.5 forum and discussions and managing notes, contacts and calendar events are available via the Moodle Web service API.
+
+As of Moodle 2.6 the managament of assignments is available via the Moodle Web service API.
+
+(see also [Moodle Web service Roadmap](https://docs.moodle.org/dev/Web_services_Roadmap))
+
 ## Changelog
 
-1.2.1, UPCOMING
+1.2.1, Dec 28, 2014
 
 - Tested against Moodle 2.8
 - A moodle course can be synced under many 'tags'
