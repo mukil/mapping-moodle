@@ -9,7 +9,6 @@ import de.deepamehta.core.osgi.PluginActivator;
 import de.deepamehta.core.service.Inject;
 import de.deepamehta.core.service.ResultList;
 import de.deepamehta.core.service.Transactional;
-import de.deepamehta.core.service.event.AllPluginsActiveListener;
 import de.deepamehta.core.storage.spi.DeepaMehtaTransaction;
 import de.deepamehta.core.util.JavaUtils;
 import de.deepamehta.plugins.accesscontrol.event.PostLoginUserListener;
@@ -48,25 +47,16 @@ import org.codehaus.jettison.json.JSONObject;
  *
  * @author Malte Reißig (<malte@mikromedia.de>)
  * @website https://github.com/mukil/mapping-moodle
- * @version 1.2.1-SNAPSHOT
+ * @version 1.2.2-SNAPSHOT
  *
  */
 
 @Path("/moodle")
 @Consumes(MediaType.APPLICATION_JSON)
 @Produces(MediaType.APPLICATION_JSON)
-public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener,
-                                                                    AllPluginsActiveListener {
+public class MoodleServiceClient extends PluginActivator implements PostLoginUserListener {
 
-    private static Logger logger = Logger.getLogger(MoodleServiceClient.class.getName());
-
-    // ---------------------------------------------------------------------------------------------- Instance Variables
-
-    // ### Consume NotifcationService
-    @Inject
-    private AccessControlService aclService;
-
-    // --- URIs DeepaMehta and all plugins in use
+    // --- Mapping Moodle Plugin Type URIs
 
     public static final String WS_MOODLE_NAME = "Moodle";
     public static final String WS_MOODLE_URI = "org.deepamehta.workspaces.moodle";
@@ -95,17 +85,13 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     public static final String MOODLE_ITEM_LICENSE_URI = "org.deepamehta.moodle.item_license";
     public static final String MOODLE_ITEM_SIZE_URI = "org.deepamehta.moodle.item_size";
 
-    // --- Tagging Notes Plugin URI
-
-    public static final String PLUGIN_URI_TAGGING_NOTES = "org.deepamehta.eduzen-tagging-notes";
-
-    // --- Data instance URIs for ISIS 2
+    // --- URIs used for imported Moodle Topics
 
     public static final String ISIS_COURSE_URI_PREFIX = "de.tu-berlin.course.";
     public static final String ISIS_SECTION_URI_PREFIX = "de.tu-berlin.section.";
     public static final String ISIS_ITEM_URI_PREFIX = "de.tu-berlin.item.";
 
-    // --- ISIS 2 Webservice related URIs
+    // --- Mapping Moodle HTTP Client Configuration related URIs
 
     private final String WEBSERVICE_CLIENT_OPTION_OPTION = "org.deepamehta.moodle.web_service_client_option";
     private final String CLIENT_OPTION_ENDPOINT_URL_URI = "org.deepamehta.moodle.web_service_endpoint_url";
@@ -120,8 +106,9 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private final String MOODLE_USER_ID_URI = "org.deepamehta.moodle.user_id";
     private final String MOODLE_SERVICE_NAME = "eduzen_web_service";
     private final String MOODLE_SERVICE_FORMAT = "moodlewsrestformat=json";
+    private final int MOODLE_SECURITY_KEY_LENGTH = 32;
 
-    // --- Deepamehta 4 URIs
+    // --- Deepamehta 4 Core URIs
 
     private final String URI_URI = "uri";
     private final String DEFAULT_ROLE_TYPE_URI = "dm4.core.default";
@@ -135,14 +122,28 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
     private final String PARENT_URI = "dm4.core.parent";
     private final String TAG_URI = "dm4.tags.tag";
     private final String REVIEW_SCORE_URI = "org.deepamehta.reviews.score";
+    
+    private static Logger logger = Logger.getLogger(MoodleServiceClient.class.getName());
+
+    // ### Consume NotifcationService
+    @Inject
+    private AccessControlService aclService;
 
 
+    
     // --
     // --- Plugin Hook implementations
     // --
-
+    
     @Override
     public void init() {
+        Properties systemProps = System.getProperties();
+        logger.info("MoodleServiceClient: JRE Keystore (Truststore) is set to "
+                + "\"" + systemProps.getProperty("javax.net.ssl.trustStore") +"\"");
+    }
+
+    @Override
+    public void postInstall() {
         if (aclService != null) {
             DeepaMehtaTransaction tx = dms.beginTx();
             try {
@@ -164,27 +165,50 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     @Override
     public void postLoginUser(String username) {
-
         startMoodleSynchronization(username);
-
-    }
-
-    @Override
-    public void allPluginsActive() {
-
-        Properties systemProps = System.getProperties();
-        // systemProps.setProperty("javax.net.ssl.trustStore", PATH_TO_JAVA_KEYSTORE);
-        // systemProps.setProperty("javax.net.ssl.trustStorePassword", PASS_FOR_JAVA_KEYSTORE);
-        logger.info("MoodleCheck: JRE Keystore (Truststore) is at "
-                + "\"" + systemProps.getProperty("javax.net.ssl.trustStore") +"\"");
-
     }
 
 
-
+    
     // --
     // --- Moodle Plugin REST API Endpoints 
     // --
+
+    @GET
+    @Path("/synchronize/{username}")
+    @Produces(MediaType.TEXT_PLAIN)
+    @Transactional
+    public String startMoodleSynchronization(@PathParam("username") String username) {
+        final Topic user = checkAuthorization();
+        // 1) Twofold sanity check
+        if (!user.getSimpleValue().toString().equals(username)) {
+            logger.info("MoodleServiceClient sanity check failed " 
+                + username + " != " + user.getSimpleValue().toString());
+            throw new RuntimeException();
+        }
+        // 2) Start Moodle-Sync for this username
+        startSynchronizationThreadFor(user);
+        return "OK";
+
+    }
+    
+    /** 
+     * Delivers the moodle security key for the logged in user to the requesting client. 
+     * This is needed to load course materials (esp. files) directly into the browser where thens, 
+     * e.g. in Firefox <object>-embeds for PDF materials call a plugin to (e.g. PDF.js) to render the file 
+     * directly in the page panel next to the topicmap in which the course material was selected.
+     */
+    @GET
+    @Path("/key")
+    @Produces(MediaType.TEXT_PLAIN)
+    public String getMoodleSecurityKey() {
+        Topic userAccount = checkAuthorization();
+        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
+            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
+            return token;
+        }
+        return null;
+    }
 
     /**
      * Relates the moodle-security-key to our currently logged-in user-account.
@@ -206,7 +230,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             JSONObject payload = new JSONObject(input);
             String moodle_key = payload.getString("moodle_key");
             // 2) prevent setting of keys which do not look like a moodle security key
-            if (moodle_key.equals("") || moodle_key.length() != 32) {
+            if (moodle_key.equals("") || moodle_key.length() != MOODLE_SECURITY_KEY_LENGTH) {
                 throw new RuntimeException("Sorry but that does not look like a \"Moodle security key.\"");
             }
             user.setProperty(MOODLE_SECURITY_KEY_URI, moodle_key, false); // addToIndex=false **/
@@ -224,56 +248,10 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         }
     }
 
-    @GET
-    @Path("/key")
-    @Produces(MediaType.TEXT_PLAIN)
-    public String getMoodleSecurityKey() {
-        Topic userAccount = checkAuthorization();
-        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
-            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
-            return token;
-        }
-        return null;
-    }
-
-    @GET
-    @Path("/synchronize/{username}")
-    @Produces(MediaType.TEXT_PLAIN)
-    @Transactional
-    public String startMoodleSynchronization(@PathParam("username") String username) {
-
-        final Topic user = checkAuthorization();
-        // 1) Twofold sanity check
-        if (!user.getSimpleValue().toString().equals(username)) {
-            logger.info("MoodleServiceClient sanity check failed " 
-                + username + " != " + user.getSimpleValue().toString());
-            throw new RuntimeException();
-        }
-        // 2) Start Moodle-Sync for this username
-        startSynchronizationThreadFor(user);
-
-        return "OK";
-
-    }
-
 
     // --
     // --- Private helper methods / Plugin Implementation
     // --
-
-    private Topic checkAuthorization() {
-        String username = aclService.getUsername();
-        if (username == null) throw new WebApplicationException(401);
-        return getUserAccountTopic(username);
-    }
-
-    private boolean setMoodleUserId(Topic userAccount, long moodleUserId) {
-        DeepaMehtaTransaction tx = dms.beginTx();
-        userAccount.setProperty(MOODLE_USER_ID_URI, "" + moodleUserId + "", false);
-        tx.success();
-        tx.finish();
-        return true;
-    }
 
     private void startSynchronizationThreadFor(Topic user) {
 
@@ -297,9 +275,9 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 // 3) Ask for potentially new \"Moodle Courses\" ..
                 logger.fine("MoodleServiceClient checking for news in all \"Moodle Courses\" of \""+user_name+"\"");
                 //    and create them if necessary / yet unknown to our system/installation
-                getMoodleCoursesWithoutAuth(local_user, getMoodleUserId(local_user), key);
+                fetchMoodleCourses(local_user, getMoodleUserId(local_user), key);
                 // 4) Check for new \"Moodle Items\" in each tagged \"Moodle Course\" our user is "participating"
-                ResultList<RelatedTopic> courses = getMoodleCoursesByUser(local_user);
+                ResultList<RelatedTopic> courses = getMoodleCourseTopicsByUser(local_user);
                 if (courses != null) {
                     for (RelatedTopic course : courses) {
                         // 5) excluse Moodle Courses with no "Moodle Course Hashtag" set from synchronziations
@@ -312,7 +290,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                             for (Topic hashtag : courseHashtags) {
                                 logger.info("\t#" + hashtag.getSimpleValue());
                             }
-                            getCourseContentsWithoutAuth(course.getId(), key, courseHashtags);
+                            fetchMoodleCourseItems(course.getId(), key, courseHashtags);
                         } else {
                             logger.info("MoodleServiceClient waiting with SYNC cause of missing #Hashtag (on \""
                                     + course.getSimpleValue() + "\")");
@@ -327,7 +305,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
 
     /** Fetches and relates the internal moodle-user-id to our currently logged-in user-account. **/
     private void fetchAndSetMoodleUserId(Topic userAccount) throws WebApplicationException {
-
         String token = getMoodleSecurityKeyWithoutAuthCheck(userAccount);
         if (token == null) throw new WebApplicationException(new RuntimeException("User has no security key."), 500);
         String parameter = "serviceshortnames[0]=" + MOODLE_SERVICE_NAME;
@@ -350,8 +327,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             throw new WebApplicationException(mc, mc.status);
         }
     }
-
-    private void getMoodleCoursesWithoutAuth(Topic userAccount, long moodleUserId, String token) {
+    
+    private void fetchMoodleCourses(Topic userAccount, long moodleUserId, String token) {
         String parameter = "userid=" + moodleUserId;
         String data = "";
         DeepaMehtaTransaction tx = dms.beginTx();
@@ -407,7 +384,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         }
     }
 
-    private void getCourseContentsWithoutAuth(long topicId, String token, List<Topic> hashtags) {
+    private void fetchMoodleCourseItems(long topicId, String token, List<Topic> hashtags) {
         long courseId = -1;
         Topic courseTopic = dms.getTopic(topicId);
         courseId = Long.parseLong(courseTopic.getUri().replaceAll(ISIS_COURSE_URI_PREFIX, ""));
@@ -438,17 +415,17 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                     JSONArray modules = section.getJSONArray("modules");
                     for (int k = 0; k < modules.length(); k++) {
                         JSONObject item = modules.getJSONObject(k);
-                        Topic itemTopic = getMoodleItemTopic(item.getLong("id"));
+                        Topic itemTopic = getMoodleCourseItemTopic(item.getLong("id"));
                         if (itemTopic == null) {
-                            itemTopic = createMoodleItemTopic(item, hashtags);
+                            itemTopic = createMoodleCourseItemTopic(item, hashtags);
                             if (itemTopic != null) {
                                 // Fix ACL so that all "Moodle"-WS Members can edit these items
                                 setDefaultMoodleGroupACLEntries(itemTopic);
-                                Association creator_edge = assignDefaultAuthorship(itemTopic);
-                                if (creator_edge != null) setDefaultMoodleGroupACLEntries(creator_edge);
+                                // Association creator_edge = assignDefaultAuthorship(itemTopic);
+                                // if (creator_edge != null) setDefaultMoodleGroupACLEntries(creator_edge);
                             }
                         } else {
-                            updateMoodleItemTopic(itemTopic, item);
+                            updateMoodleCourseItemTopic(itemTopic, item);
                         }
                         if (!hasAggregatingSectionParentEdge(itemTopic, sectionTopic)) {
                             createAggregatingSectionEdge(sectionTopic, itemTopic);
@@ -481,14 +458,418 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             tx.finish();
         }
     }
+    
+    private void createParticipantEdge(Topic courseTopic, Topic userAccount) {
+        AssociationModel participantEdge = new AssociationModel(MOODLE_PARTICIPANT_EDGE,
+                new TopicRoleModel(courseTopic.getId(), DEFAULT_ROLE_TYPE_URI),
+                new TopicRoleModel(userAccount.getId(), DEFAULT_ROLE_TYPE_URI));
+        Association edge = dms.createAssociation(participantEdge);
+    }
+    
+    private boolean hasParticipantEdge (Topic course, Topic user) {
+        boolean value = false;
+        Topic userAccount = course.getRelatedTopic(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
+                DEFAULT_ROLE_TYPE_URI, USER_ACCOUNT_TYPE_URI);
+        if (userAccount != null && user.getId() == userAccount.getId()) return value = true;
+        return value;
+    }
 
+    private void createAggregatingCourseEdge (Topic courseTopic, Topic sectionTopic) {
+        AssociationModel aggregationEdge = new AssociationModel(AGGREGATION_TYPE_URI,
+                new TopicRoleModel(courseTopic.getId(), PARENT_ROLE_TYPE_URI),
+                new TopicRoleModel(sectionTopic.getId(), CHILD_ROLE_TYPE_URI));
+        dms.createAssociation(aggregationEdge);
+    }
+    
+    private boolean hasAggregatingCourseParentEdge (Topic child, Topic parent) {
+        boolean value = false;
+        if (child == null) return true;
+        Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
+                PARENT_ROLE_TYPE_URI, MOODLE_COURSE_URI);
+        if (topic != null && parent.getId() == topic.getId()) return value = true;
+        return value;
+    }
+
+    private void createAggregatingSectionEdge (Topic sectionTopic, Topic itemTopic) {
+        AssociationModel aggregationEdge = new AssociationModel(AGGREGATION_TYPE_URI,
+                new TopicRoleModel(sectionTopic.getId(), PARENT_ROLE_TYPE_URI),
+                new TopicRoleModel(itemTopic.getId(), CHILD_ROLE_TYPE_URI));
+        dms.createAssociation(aggregationEdge);
+    }
+        
+    private boolean hasAggregatingSectionParentEdge (Topic child, Topic parent) {
+        boolean value = false;
+        if (child == null) return true;
+        Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
+                PARENT_ROLE_TYPE_URI, MOODLE_SECTION_URI);
+        if (topic != null && parent.getId() == topic.getId()) return value = true;
+        return value;
+    }
+
+    private Topic createMoodleCourseTopic(JSONObject object) {
+        Topic result = null;
+        try {
+            if (object.getInt("visible") == 0) return null;
+            long courseId = object.getLong("id");
+            String shortName = object.getString("shortname");
+            String fullName = object.getString("fullname");
+            ChildTopicsModel model = new ChildTopicsModel();
+            model.put(MOODLE_COURSE_NAME_URI, fullName);
+            model.put(MOODLE_COURSE_SHORT_NAME_URI, shortName);
+            TopicModel course = new TopicModel(ISIS_COURSE_URI_PREFIX + courseId, MOODLE_COURSE_URI, model);
+            course.setUri(ISIS_COURSE_URI_PREFIX + courseId);
+            result = dms.createTopic(course);
+            assignToMoodleWorkspace(result);
+        } catch (JSONException ex) {
+            logger.warning("Could not create \"Moodle Course\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        }
+        return result;
+    }
+
+    private Topic updateMoodleCourseTopic(Topic course, JSONObject object) {
+        try {
+            boolean update_this = false;
+            String new_name = object.getString("shortname");
+            String new_fullname = object.getString("fullname");
+            if (!course.getChildTopics().getString(MOODLE_COURSE_SHORT_NAME_URI).equals(new_name) ||
+                !course.getChildTopics().getString(MOODLE_COURSE_NAME_URI).equals(new_fullname)) {
+                update_this = true;
+            }
+            // Update (if there were changes)
+            if (update_this) {
+                ChildTopicsModel model = new ChildTopicsModel();
+                model.put(MOODLE_COURSE_NAME_URI, new_name);
+                model.put(MOODLE_COURSE_SHORT_NAME_URI, new_fullname);
+                dms.updateTopic(new TopicModel(course.getId(), model));
+                // todo: add to usage report
+            }
+            return course;
+        } catch (JSONException ex) {
+            logger.warning("Could not update \"Moodle Course\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        }
+        return null;
+    }
+    
+    private Topic getMoodleCourseTopic(long courseId) {
+        return dms.getTopic("uri", new SimpleValue(ISIS_COURSE_URI_PREFIX + courseId));
+    }
+    
+    private ResultList<RelatedTopic> getMoodleCourseTopicsByUser(Topic user) {
+        return user.getRelatedTopics(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
+                DEFAULT_ROLE_TYPE_URI, MOODLE_COURSE_URI, 0);
+    }
+
+    private Topic createMoodleSectionTopic(JSONObject object, int nr) {
+        try {
+            if (object.getInt("visible") == 0) return null; // item is hidden, do not create it
+            long sectionId = object.getLong("id");
+            String name = object.getString("name");
+            String summary = object.getString("summary");
+            ChildTopicsModel model = new ChildTopicsModel();
+            model.put(MOODLE_SECTION_NAME_URI, name);
+            model.put(MOODLE_SECTION_SUMMARY_URI, summary);
+            model.put(MOODLE_SECTION_ORDINAL_NR, nr);
+            TopicModel section = new TopicModel(ISIS_SECTION_URI_PREFIX + sectionId, MOODLE_SECTION_URI, model);
+            // OWNER AND CREATOR will be the (logged in user) who triggered this method IN ANY CASE
+            Topic result = dms.createTopic(section);
+            setDefaultMoodleAdminACLEntries(result); // just "admin" can edit these
+            assignToMoodleWorkspace(result);
+            return result;
+        } catch (JSONException ex) {
+            logger.warning("Could not create \"Moodle Section\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        }
+        return null;
+    }
+
+    private Topic updateMoodleSectionTopic(Topic section, JSONObject object) {
+        try {
+            boolean update_this = false;
+            String new_name = object.getString("name");
+            String new_summary = object.getString("summary");
+            // Custom comparison of values
+            if (!section.getChildTopics().getString(MOODLE_SECTION_NAME_URI).equals(new_name) ||
+                !section.getChildTopics().getString(MOODLE_SECTION_SUMMARY_URI).equals(new_summary)) {
+                update_this = true;
+            }
+            // Update (if there were changes)
+            if (update_this) {
+                ChildTopicsModel model = new ChildTopicsModel();
+                model.put(MOODLE_SECTION_NAME_URI, new_name);
+                model.put(MOODLE_SECTION_SUMMARY_URI, new_summary);
+                section.setChildTopics(model);
+            }
+        } catch (JSONException ex) {
+            logger.warning("Could not update \"Moodle Section\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        }
+        return null;
+    }
+    
+    private Topic getMoodleSectionTopic(long sectionId) {
+        return dms.getTopic("uri", new SimpleValue(ISIS_SECTION_URI_PREFIX + sectionId));
+    }
+
+    private Topic createMoodleCourseItemTopic(JSONObject object, List<Topic> hashtags) {
+        try {
+            // 0) Check if given moodle item is actually "hidden" and if not remember moodle-id
+            if (object.getInt("visible") == 0) return null; // item is hidden, do not create it
+            long itemId = object.getLong("id");
+            // 1) Parse some generic information for this item
+            ChildTopicsModel model = parseGenericsToItemModel(object);
+            // 2) and if it's a material (typeof "resource" or "url") process its list of "contents"
+            JSONArray contents = null;
+            if (object.has("contents")) {
+                contents = object.getJSONArray("contents");
+                for (int i = 0; i < contents.length(); i++) { // (actually never in use, but possible)
+                    JSONObject resource = contents.getJSONObject(i);
+                    parseResourceToItemModel(model, resource);
+                    // ..) equip moodle item with timestamp of or resource (e.g. files)
+                    parseTimestampsToItemModel(model, resource);
+                }
+            } else {
+                // 3) equip any other item with default timestamps (or the timestamps of the object, not resource)
+                parseTimestampsToItemModel(model, object);
+            }
+            // 4) equip moodle item with every hashtag set on the course
+            for (Topic hashtag : hashtags) {
+                model.addRef(TAG_URI, hashtag.getId());
+            }
+            // 5) construct our internal uri for any moodl item
+            TopicModel item = new TopicModel(ISIS_ITEM_URI_PREFIX + itemId, MOODLE_ITEM_URI, model);
+            Topic result = dms.createTopic(item);
+            // 6) fix workspace assignment for shared editing (tagging) of moodle items via webclient
+            assignToMoodleWorkspace(result);
+            // sendTopicNotification("New Moodle Item", result);
+            return result;
+        } catch (JSONException ex) {
+            logger.warning("Could not create \"Moodle Item\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        }
+        return null;
+    }
+
+    private Topic updateMoodleCourseItemTopic(Topic item, JSONObject object) {
+        DeepaMehtaTransaction tx = dms.beginTx();
+        try {
+            // 0) parse new generic infos to new model
+            ChildTopicsModel model = parseGenericsToItemModel(object);
+            // 1) parse infos specific to resources to model
+            JSONArray contents = null;
+            long last_modified_in_moodle = 0;
+            if (object.has("contents")) {
+                contents = object.getJSONArray("contents");
+                for (int i = 0; i < contents.length(); i++) { // (no observation that this is  >1, but possible)
+                    // if list of contents in a module is >1, currently the last one succeeds
+                    JSONObject resource = contents.getJSONObject(i);
+                    parseResourceToItemModel(model, resource);
+                    parseTimestampsToItemModel(model, resource);
+                }
+            } else {
+                // 2) equip ay other item with the new (moodle or our default) timestamps first
+                parseTimestampsToItemModel(model, object);
+            }
+            // 2) start to perform update checks on contents of this (new) item
+            boolean update_this = false;
+            if (!item.getSimpleValue().toString().equals(model.getString(MOODLE_ITEM_NAME_URI))) { // by item-name
+                // log.info("MoodleServiceClient: The name of the item has changed: ITEM is TO_BE_UPDATED");
+                update_this = true;
+            } else if (item.getChildTopics().getString(MOODLE_ITEM_TYPE_URI).equals("url")) { // by url-value
+                // on "url"-items we perform a comparison by-value (cause timestamps are always missing)
+                if (!item.getChildTopics().getString(MOODLE_ITEM_REMOTE_URL_URI)
+                        .equals(model.getString(MOODLE_ITEM_REMOTE_URL_URI))) {
+                    // log.info("MoodleServiceClient: The url-value changed: ITEM is TO_BE_UPDATED");
+                    update_this = true;
+                }
+            } else if (item.getChildTopics().has(MOODLE_ITEM_MODIFIED_URI)) {
+                // note: sometimes int sometimes long (webclient!) cause of neo4j and moodles timestamps/1000
+                // check the last_modification timestamp from on our topic (in our current DB)
+                long existing_timestamp = item.getChildTopics().getLong(MOODLE_ITEM_MODIFIED_URI);
+                if (existing_timestamp < last_modified_in_moodle) { // lets write new contents to our \"Moodle Item\"
+                    logger.fine("MoodleServiceClient: The remote Last-Modified-Timestamp indicates: "
+                            + "ITEM is TO_BE_UPDATED");
+                    update_this = true;
+                }
+            }
+            if (update_this) {
+                // 3) write update
+                dms.updateTopic(new TopicModel(item.getId(), model));
+                // sendClientNotification("Changed Moodle Item in \""
+                   //     + courseTopic.getSimpleValue().toString() + "\"", item);
+            }
+            tx.success();
+            return item;
+        } catch (JSONException ex) {
+            tx.failure();
+            logger.warning("# ROLLBACK!");
+            logger.warning("Could not update \"Moodle Item\"-Topic: " 
+                + ex.getMessage() + "(" + ex.getClass() + ")");
+        } finally {
+            tx.finish();
+        }
+        return null;
+    }
+    
+    private Topic getMoodleCourseItemTopic(long itemId) {
+        return dms.getTopic("uri", new SimpleValue(ISIS_ITEM_URI_PREFIX + itemId));
+    }
+    
+    private void setMoodleUserId(Topic userAccount, long moodleUserId) {
+        DeepaMehtaTransaction tx = dms.beginTx();
+        userAccount.setProperty(MOODLE_USER_ID_URI, "" + moodleUserId + "", false);
+        tx.success();
+        tx.finish();
+    }
+    
+    private long getMoodleUserId(Topic userAccount) {
+        if (userAccount.hasProperty(MOODLE_USER_ID_URI)) {
+            String id = (String) userAccount.getProperty(MOODLE_USER_ID_URI);
+            long moodle_user_id = Long.parseLong(id);
+            return moodle_user_id;
+        }
+        return -1;
+    }
+    
+    
+    
+    // --
+    // --- Moodle JSON Response parser methods
+    // --
+
+    private ChildTopicsModel parseGenericsToItemModel(JSONObject object) throws JSONException {
+        // 0) parse name, icon and type
+        String name = object.getString("name");
+        String iconPath = object.getString("modicon");
+        String type = object.getString("modname");
+        String description = "", href = "";
+        // 1) check for an optional description (e.g. "choice", or "label")
+        if (object.has("description")) {
+            description = object.getString("description");
+        }
+        // 2) check for a moodle item url so we can link directly to the content (into the moodle installation)
+        if (object.has("url")) {
+            href = object.getString("url");
+        }
+        // 3) Initialize the values of each moodle item
+        ChildTopicsModel model = new ChildTopicsModel();
+        model.put(MOODLE_ITEM_NAME_URI, name);
+        model.put(MOODLE_ITEM_ICON_URI, iconPath);
+        model.put(MOODLE_ITEM_DESC_URI, description);
+        model.put(MOODLE_ITEM_HREF_URI, href); // exists always (if item is not of type "label")
+        model.put(MOODLE_ITEM_TYPE_URI, type);
+        // ..) with a neutral review-score
+        model.put(REVIEW_SCORE_URI, 0);
+        return model;
+    }
+
+    private ChildTopicsModel parseResourceToItemModel(ChildTopicsModel model, JSONObject resource)
+            throws JSONException {
+        String resourceType = resource.getString("type");
+        String fileUrl = "", fileName = "", author = "", license = "";
+        // 1) Fill up either web resource or file-type
+        if (resourceType.equals("url")) { // Moodle Resource is an URL
+            fileUrl = resource.getString("fileurl");
+            // 1.1) parse youtube and replace /watch?v=id with /embed/id in the url
+            if (fileUrl.contains("youtube") || fileUrl.contains("youtu.be")) {
+                // turn youtube-share url into /embed/-url
+                fileUrl = parseYoutubeEmbedUrl(fileUrl);
+            }
+            model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
+            // add it to the (to be created) Moodle Item
+            model.put(MOODLE_ITEM_TYPE_URI, resourceType);
+            // alternatively: model.put(MOODLE_ITEM_HREF_URI, fileurl);
+        } else if (resourceType.equals("file")) { // Moodle Resource is an URL
+            // pages _and_ documents are of type file
+            fileName = resource.getString("filename");
+            fileUrl = resource.getString("fileurl");
+            if (!resource.isNull("license")) {
+                license = resource.getString("license");
+                model.put(MOODLE_ITEM_LICENSE_URI, license);
+            }
+            if (!resource.isNull("author")) {
+                author = resource.getString("author");
+                model.put(MOODLE_ITEM_AUTHOR_URI, author);
+            }
+            long fileSize = resource.getLong("filesize");
+            model.put(MOODLE_ITEM_NAME_URI, fileName);
+            model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
+            model.put(MOODLE_ITEM_SIZE_URI, fileSize);
+            String file_type = JavaUtils.getFileType(fileName);
+            // 1.1) Try to determine file media_type with the help of DM-Utils
+            if (file_type == null) file_type = "Unknown"; // Maybe null (e.g. for .ODT-Documents)
+            model.put(MOODLE_ITEM_MEDIA_TYPE_URI, file_type);
+            model.put(MOODLE_ITEM_TYPE_URI, resourceType);
+        }
+        // The new model will just be written to topic/db if our custom update-check (see caller) succeeds
+        return model;
+    }
+
+    private ChildTopicsModel parseTimestampsToItemModel(ChildTopicsModel model, JSONObject item)
+            throws JSONException {
+        long last_modified = 0, time_created = 0;
+        // 1) Check for timestamp "Last Modified"
+        if (item.has("timemodified") && !item.isNull("timemodified")) {
+            last_modified = item.getLong("timemodified") * 1000; // addding three zeros
+        } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
+            last_modified = new Date().getTime();
+        }
+        // 2) Check for timestamp "Created"
+        if (item.has("timecreated") && !item.isNull("timecreated")) {
+            time_created = item.getLong("timecreated")  * 1000; // addding three zeros;
+        } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
+            time_created = new Date().getTime();
+        }
+        model.put(MOODLE_ITEM_MODIFIED_URI, last_modified);
+        model.put(MOODLE_ITEM_CREATED_URI, time_created);
+        return model;
+    }
+
+    private String parseYoutubeEmbedUrl(String fileUrl) {
+        String new_url = fileUrl;
+        // 0) Skip transformation if url already contains the "/embed/"-part
+        if (fileUrl.contains("/embed")) return new_url;
+        // 1) Transform URL Scheme: http://www.youtube.com/watch?v=A9b9bxUyK0o
+        if (fileUrl.contains("/watch")) {
+            String[] parts = fileUrl.split("v=");
+            // Strip of everything behind & e.g.: &feature=youtube_gdata
+            String new_url_part = "";
+            int indexOfParameters = parts[1].indexOf("&");
+            if (parts[1] != null && indexOfParameters != -1) {
+                new_url_part = parts[1].substring(0, indexOfParameters);
+                new_url = "//youtube.com/embed/" + new_url_part;
+            } else if (parts[1] != null) {
+                new_url = "//youtube.com/embed/" + parts[1];
+            }
+        }
+        // 2) Transform URL Scheme: http://youtu.be/A9b9bxUyK0o
+        if (fileUrl.contains("youtu.be/")) {
+            String[] parts = fileUrl.split(".be/");
+                        String new_url_part = "";
+            int indexOfParameters = parts[1].indexOf("&");
+            if (parts[1] != null && indexOfParameters != -1) {
+                new_url_part = parts[1].substring(0, indexOfParameters);
+                new_url = "//youtube.com/embed/" + new_url_part;
+            } else if (parts[1] != null) {
+                new_url = "//youtube.com/embed/" + parts[1];
+            }
+        }
+        return new_url;
+    }
+    
+    /** 
+     * Do a HTTP/S request to the configured moodle endpoint.
+     * Completes successfully and returns a String if a HTTP Status of 200 is returned.
+     * Throws RuntimeExceptions if Java SSL Keystore options or certificates are misconfigured.
+     * 
+     * @return  Moodle HTTP response body (String)
+     */
     private String callMoodle (String key, String functionName, String params) throws MoodleConnectionException {
-
         Topic serviceUrl = getMoodleEndpointUrl();
         String endpointUri = serviceUrl.getSimpleValue().value().toString();
         String queryUrl = endpointUri + "?wstoken=" + key 
-                + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT;
-                // "&service=" + MOODLE_SERVICE_NAME +
+                + "&wsfunction=" + functionName + "&" + MOODLE_SERVICE_FORMAT; // "&service=" + MOODLE_SERVICE_NAME +
         try {
             if (isHTTPSConfigured()) {
                 // Many thanks to "Bruno" for formulating the following idea/approach at:
@@ -541,6 +922,8 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
                 }
                 return response.toString();
             } else { // No HTTPS configured
+                logger.severe("You can but you should never make reqests to your moodle installation on behalf of "
+                        + "your users unencrypted. Please configure HTTPS at your moodle web service endpoint.");
                 HttpURLConnection con = (HttpURLConnection) new URL(queryUrl).openConnection();
                 con.setRequestMethod("POST");
                 con.setRequestProperty("Content-Type", "application/x-www-form-urlencoded");
@@ -581,7 +964,7 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
             logger.warning("Moodle KeyManagementException " + ex.getMessage());
             throw new RuntimeException(ex);
         } catch (CertificateException ex) {
-            logger.warning("Moodle CertificatieException " + ex.getMessage());
+            logger.warning("Moodle CertificateException " + ex.getMessage());
             throw new RuntimeException(ex);
         } catch (KeyStoreException ex) {
             logger.warning("Moodle KeyStoreException " + ex.getMessage());
@@ -602,358 +985,28 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         }
     }
 
-    private void createParticipantEdge(Topic courseTopic, Topic userAccount) {
-        AssociationModel participantEdge = new AssociationModel(MOODLE_PARTICIPANT_EDGE,
-                new TopicRoleModel(courseTopic.getId(), DEFAULT_ROLE_TYPE_URI),
-                new TopicRoleModel(userAccount.getId(), DEFAULT_ROLE_TYPE_URI));
-        Association edge = dms.createAssociation(participantEdge);
-    }
-
-    private void createAggregatingCourseEdge (Topic courseTopic, Topic sectionTopic) {
-        AssociationModel aggregationEdge = new AssociationModel(AGGREGATION_TYPE_URI,
-                new TopicRoleModel(courseTopic.getId(), PARENT_ROLE_TYPE_URI),
-                new TopicRoleModel(sectionTopic.getId(), CHILD_ROLE_TYPE_URI));
-        Association edge = dms.createAssociation(aggregationEdge);
-    }
-
-    private void createAggregatingSectionEdge (Topic sectionTopic, Topic itemTopic) {
-        AssociationModel aggregationEdge = new AssociationModel(AGGREGATION_TYPE_URI,
-                new TopicRoleModel(sectionTopic.getId(), PARENT_ROLE_TYPE_URI),
-                new TopicRoleModel(itemTopic.getId(), CHILD_ROLE_TYPE_URI));
-        Association edge = dms.createAssociation(aggregationEdge);
-    }
-
-    private Topic createMoodleCourseTopic(JSONObject object) {
-        Topic result = null;
-        try {
-            if (object.getInt("visible") == 0) return null;
-            long courseId = object.getLong("id");
-            String shortName = object.getString("shortname");
-            String fullName = object.getString("fullname");
-            ChildTopicsModel model = new ChildTopicsModel();
-            model.put(MOODLE_COURSE_NAME_URI, fullName);
-            model.put(MOODLE_COURSE_SHORT_NAME_URI, shortName);
-            TopicModel course = new TopicModel(ISIS_COURSE_URI_PREFIX + courseId, MOODLE_COURSE_URI, model);
-            course.setUri(ISIS_COURSE_URI_PREFIX + courseId);
-            result = dms.createTopic(course);
-            assignToMoodleWorkspace(result);
-        } catch (JSONException ex) {
-            logger.warning("Could not create \"Moodle Course\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        }
-        return result;
-    }
-
-    private Topic updateMoodleCourseTopic(Topic course, JSONObject object) {
-        try {
-            boolean update_this = false;
-            String new_name = object.getString("shortname");
-            String new_fullname = object.getString("fullname");
-            if (!course.getChildTopics().getString(MOODLE_COURSE_SHORT_NAME_URI).equals(new_name) ||
-                !course.getChildTopics().getString(MOODLE_COURSE_NAME_URI).equals(new_fullname)) {
-                update_this = true;
-            }
-            // Update (if there were changes)
-            if (update_this) {
-                ChildTopicsModel model = new ChildTopicsModel();
-                model.put(MOODLE_COURSE_NAME_URI, new_name);
-                model.put(MOODLE_COURSE_SHORT_NAME_URI, new_fullname);
-                dms.updateTopic(new TopicModel(course.getId(), model));
-                // todo: add to usage report
-            }
-            return course;
-        } catch (JSONException ex) {
-            logger.warning("Could not update \"Moodle Course\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        }
-        return null;
-    }
-
-    private Topic createMoodleSectionTopic(JSONObject object, int nr) {
-        try {
-            if (object.getInt("visible") == 0) return null; // item is hidden, do not create it
-            long sectionId = object.getLong("id");
-            String name = object.getString("name");
-            String summary = object.getString("summary");
-            ChildTopicsModel model = new ChildTopicsModel();
-            model.put(MOODLE_SECTION_NAME_URI, name);
-            model.put(MOODLE_SECTION_SUMMARY_URI, summary);
-            model.put(MOODLE_SECTION_ORDINAL_NR, nr);
-            TopicModel section = new TopicModel(ISIS_SECTION_URI_PREFIX + sectionId, MOODLE_SECTION_URI, model);
-            // OWNER AND CREATOR will be the (logged in user) who triggered this method IN ANY CASE
-            Topic result = dms.createTopic(section);
-            setDefaultMoodleAdminACLEntries(result); // just "admin" can edit these
-            assignToMoodleWorkspace(result);
-            return result;
-        } catch (JSONException ex) {
-            logger.warning("Could not create \"Moodle Section\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        }
-        return null;
-    }
-
-    private Topic updateMoodleSectionTopic(Topic section, JSONObject object) {
-        try {
-            boolean update_this = false;
-            String new_name = object.getString("name");
-            String new_summary = object.getString("summary");
-            // Custom comparison of values
-            if (!section.getChildTopics().getString(MOODLE_SECTION_NAME_URI).equals(new_name) ||
-                !section.getChildTopics().getString(MOODLE_SECTION_SUMMARY_URI).equals(new_summary)) {
-                update_this = true;
-            }
-            // Update (if there were changes)
-            if (update_this) {
-                ChildTopicsModel model = new ChildTopicsModel();
-                model.put(MOODLE_SECTION_NAME_URI, new_name);
-                model.put(MOODLE_SECTION_SUMMARY_URI, new_summary);
-                section.setChildTopics(model);
-            }
-        } catch (JSONException ex) {
-            logger.warning("Could not update \"Moodle Section\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        }
-        return null;
+    private Topic checkAuthorization() {
+        String username = aclService.getUsername();
+        if (username == null) throw new WebApplicationException(401);
+        return getUserAccountTopic(username);
     }
     
-    private Topic createMoodleItemTopic(JSONObject object, List<Topic> hashtags) {
-        try {
-            // 0) Check if given moodle item is actually "hidden" and if not remember moodle-id
-            if (object.getInt("visible") == 0) return null; // item is hidden, do not create it
-            long itemId = object.getLong("id");
-            // 1) Parse some generic information for this item
-            ChildTopicsModel model = parseGenericsToItemModel(object);
-            // 2) and if it's a material (typeof "resource" or "url") process its list of "contents"
-            JSONArray contents = null;
-            if (object.has("contents")) {
-                contents = object.getJSONArray("contents");
-                for (int i = 0; i < contents.length(); i++) { // (actually never in use, but possible)
-                    JSONObject resource = contents.getJSONObject(i);
-                    parseResourceToItemModel(model, resource);
-                    // ..) equip moodle item with timestamp of or resource (e.g. files)
-                    parseTimestampsToItemModel(model, resource);
-                }
-            } else {
-                // 3) equip any other item with default timestamps (or the timestamps of the object, not resource)
-                parseTimestampsToItemModel(model, object);
-            }
-            // 4) equip moodle item with every hashtag set on the course
-            for (Topic hashtag : hashtags) {
-                model.addRef(TAG_URI, hashtag.getId());
-            }
-            // 5) construct our internal uri for any moodl item
-            TopicModel item = new TopicModel(ISIS_ITEM_URI_PREFIX + itemId, MOODLE_ITEM_URI, model);
-            Topic result = dms.createTopic(item);
-            // 6) fix workspace assignment for shared editing (tagging) of moodle items via webclient
-            assignToMoodleWorkspace(result);
-            // sendTopicNotification("New Moodle Item", result);
-            return result;
-        } catch (JSONException ex) {
-            logger.warning("Could not create \"Moodle Item\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        }
-        return null;
-    }
-
-    private Topic updateMoodleItemTopic(Topic item, JSONObject object) {
-        DeepaMehtaTransaction tx = dms.beginTx();
-        try {
-            // 0) parse new generic infos to new model
-            ChildTopicsModel model = parseGenericsToItemModel(object);
-            // 1) parse infos specific to resources to model
-            JSONArray contents = null;
-            long last_modified_in_moodle = 0;
-            if (object.has("contents")) {
-                contents = object.getJSONArray("contents");
-                for (int i = 0; i < contents.length(); i++) { // (no observation that this is  >1, but possible)
-                    // if list of contents in a module is >1, currently the last one succeeds
-                    JSONObject resource = contents.getJSONObject(i);
-                    parseResourceToItemModel(model, resource);
-                    parseTimestampsToItemModel(model, resource);
-                }
-            } else {
-                // 2) equip ay other item with the new (moodle or our default) timestamps first
-                parseTimestampsToItemModel(model, object);
-            }
-            // 2) start to perform update checks on contents of this (new) item
-            boolean update_this = false;
-            if (!item.getSimpleValue().toString().equals(model.getString(MOODLE_ITEM_NAME_URI))) { // by item-name
-                // log.info("MoodleServiceClient: The name of the item has changed: ITEM is TO_BE_UPDATED");
-                update_this = true;
-            } else if (item.getChildTopics().getString(MOODLE_ITEM_TYPE_URI).equals("url")) { // by url-value
-                // on "url"-items we perform a comparison by-value (cause timestamps are always missing)
-                if (!item.getChildTopics().getString(MOODLE_ITEM_REMOTE_URL_URI)
-                        .equals(model.getString(MOODLE_ITEM_REMOTE_URL_URI))) {
-                    // log.info("MoodleServiceClient: The url-value changed: ITEM is TO_BE_UPDATED");
-                    update_this = true;
-                }
-            } else if (item.getChildTopics().has(MOODLE_ITEM_MODIFIED_URI)) {
-                // note: sometimes int sometimes long (webclient!) cause of neo4j and moodles timestamps/1000
-                // check the last_modification timestamp from on our topic (in our current DB)
-                long existing_timestamp = item.getChildTopics().getLong(MOODLE_ITEM_MODIFIED_URI);
-                if (existing_timestamp < last_modified_in_moodle) { // lets write new contents to our \"Moodle Item\"
-                    logger.fine("MoodleServiceClient: The remote Last-Modified-Timestamp indicates: "
-                            + "ITEM is TO_BE_UPDATED");
-                    update_this = true;
-                }
-            }
-
-            if (update_this) {
-                // 3) write update
-                dms.updateTopic(new TopicModel(item.getId(), model));
-                // sendClientNotification("Changed Moodle Item in \""
-                   //     + courseTopic.getSimpleValue().toString() + "\"", item);
-            }
-            tx.success();
-            return item;
-        } catch (JSONException ex) {
-            tx.failure();
-            logger.warning("# ROLLBACK!");
-            logger.warning("Could not update \"Moodle Item\"-Topic: " 
-                + ex.getMessage() + "(" + ex.getClass() + ")");
-        } finally {
-            tx.finish();
-        }
-        return null;
-    }
-
-    private ChildTopicsModel parseGenericsToItemModel(JSONObject object) throws JSONException {
-        // 0) parse name, icon and type
-        String name = object.getString("name");
-        String iconPath = object.getString("modicon");
-        String type = object.getString("modname");
-        String description = "", href = "";
-        // 1) check for an optional description (e.g. "choice", or "label")
-        if (object.has("description")) {
-            description = object.getString("description");
-        }
-        // 2) check for a moodle item url so we can link directly to the content (into the moodle installation)
-        if (object.has("url")) {
-            href = object.getString("url");
-        }
-        // 3) Initialize the values of each moodle item
-        ChildTopicsModel model = new ChildTopicsModel();
-        model.put(MOODLE_ITEM_NAME_URI, name);
-        model.put(MOODLE_ITEM_ICON_URI, iconPath);
-        model.put(MOODLE_ITEM_DESC_URI, description);
-        model.put(MOODLE_ITEM_HREF_URI, href); // exists always (if item is not of type "label")
-        model.put(MOODLE_ITEM_TYPE_URI, type);
-        // ..) with a neutral review-score
-        model.put(REVIEW_SCORE_URI, 0);
-        return model;
-    }
-
-    private ChildTopicsModel parseResourceToItemModel(ChildTopicsModel model, JSONObject resource)
-            throws JSONException {
-        String resourceType = resource.getString("type");
-        String fileUrl = "", fileName = "", author = "", license = "";
-        // 1) Fill up either web resource or file-type
-        if (resourceType.equals("url")) { // Moodle Resource is an URL
-            fileUrl = resource.getString("fileurl");
-            // 1.1) parse youtube and replace /watch?v=id with /embed/id in the url
-            if (fileUrl.contains("youtube") || fileUrl.contains("youtu.be")) {
-                // turn youtube-share url into /embed/-url
-                fileUrl = createYoutubeEmbedUrl(fileUrl);
-            }
-            model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
-            // add it to the (to be created) Moodle Item
-            model.put(MOODLE_ITEM_TYPE_URI, resourceType);
-            // alternatively: model.put(MOODLE_ITEM_HREF_URI, fileurl);
-        } else if (resourceType.equals("file")) { // Moodle Resource is an URL
-            // pages _and_ documents are of type file
-            fileName = resource.getString("filename");
-            fileUrl = resource.getString("fileurl");
-            if (!resource.isNull("license")) {
-                license = resource.getString("license");
-                model.put(MOODLE_ITEM_LICENSE_URI, license);
-            }
-            if (!resource.isNull("author")) {
-                author = resource.getString("author");
-                model.put(MOODLE_ITEM_AUTHOR_URI, author);
-            }
-            long fileSize = resource.getLong("filesize");
-            model.put(MOODLE_ITEM_NAME_URI, fileName);
-            model.put(MOODLE_ITEM_REMOTE_URL_URI, fileUrl);
-            model.put(MOODLE_ITEM_SIZE_URI, fileSize);
-            String file_type = JavaUtils.getFileType(fileName);
-            // 1.1) Try to determine file media_type with the help of DM-Utils
-            if (file_type == null) file_type = "Unknown"; // Maybe null (e.g. for .ODT-Documents)
-            model.put(MOODLE_ITEM_MEDIA_TYPE_URI, file_type);
-            model.put(MOODLE_ITEM_TYPE_URI, resourceType);
-        }
-        // The new model will just be written to topic/db if our custom update-check (see caller) succeeds
-        return model;
-    }
-
-    private ChildTopicsModel parseTimestampsToItemModel(ChildTopicsModel model, JSONObject item)
-            throws JSONException {
-        long last_modified = 0, time_created = 0;
-        // 1) Check for timestamp "Last Modified"
-        if (item.has("timemodified") && !item.isNull("timemodified")) {
-            last_modified = item.getLong("timemodified") * 1000; // addding three zeros
-        } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
-            last_modified = new Date().getTime();
-        }
-        // 2) Check for timestamp "Created"
-        if (item.has("timecreated") && !item.isNull("timecreated")) {
-            time_created = item.getLong("timecreated")  * 1000; // addding three zeros;
-        } else { // e.g. contents of type "url" NEVER have any timestamp set, setting it to NOW
-            time_created = new Date().getTime();
-        }
-        model.put(MOODLE_ITEM_MODIFIED_URI, last_modified);
-        model.put(MOODLE_ITEM_CREATED_URI, time_created);
-        return model;
-    }
-
-    private String createYoutubeEmbedUrl(String fileUrl) {
-        String new_url = fileUrl;
-        // 0) Skip transformation if url already contains the "/embed/"-part
-        if (fileUrl.contains("/embed")) return new_url;
-        // 1) Transform URL Scheme: http://www.youtube.com/watch?v=A9b9bxUyK0o
-        if (fileUrl.contains("/watch")) {
-            String[] parts = fileUrl.split("v=");
-            // Strip of everything behind & e.g.: &feature=youtube_gdata
-            String new_url_part = "";
-            int indexOfParameters = parts[1].indexOf("&");
-            if (parts[1] != null && indexOfParameters != -1) {
-                new_url_part = parts[1].substring(0, indexOfParameters);
-                new_url = "//youtube.com/embed/" + new_url_part;
-            } else if (parts[1] != null) {
-                new_url = "//youtube.com/embed/" + parts[1];
-            }
-        }
-        // 2) Transform URL Scheme: http://youtu.be/A9b9bxUyK0o
-        if (fileUrl.contains("youtu.be/")) {
-            String[] parts = fileUrl.split(".be/");
-                        String new_url_part = "";
-            int indexOfParameters = parts[1].indexOf("&");
-            if (parts[1] != null && indexOfParameters != -1) {
-                new_url_part = parts[1].substring(0, indexOfParameters);
-                new_url = "//youtube.com/embed/" + new_url_part;
-            } else if (parts[1] != null) {
-                new_url = "//youtube.com/embed/" + parts[1];
-            }
-        }
-        return new_url;
-    }
-
     private Topic getUserAccountTopic(String username) {
         Topic accountTopic = null;
         Topic userTopic = dms.getTopic(USER_NAME_TYPE_URI, new SimpleValue(username)).loadChildTopics();
         accountTopic = userTopic.getRelatedTopic(COMPOSITION_TYPE_URI, CHILD_ROLE_TYPE_URI, PARENT_ROLE_TYPE_URI,
-                USER_ACCOUNT_TYPE_URI).loadChildTopics();
+                USER_ACCOUNT_TYPE_URI);
         return accountTopic;
     }
 
-    private long getMoodleUserId(Topic userAccount) {
-        if (userAccount.hasProperty(MOODLE_USER_ID_URI)) {
-            String id = (String) userAccount.getProperty(MOODLE_USER_ID_URI);
-            long moodle_user_id = Long.parseLong(id);
-            return moodle_user_id;
+    private String getMoodleSecurityKeyWithoutAuthCheck(Topic userAccount) {
+        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
+            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
+            return token;
         }
-        return -1;
+        return null;
     }
-
+    
     private Topic getMoodleEndpointUrl() {
         return dms.getTopic("uri", new SimpleValue(CLIENT_OPTION_ENDPOINT_URL_URI)).loadChildTopics();
     }
@@ -973,59 +1026,34 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         return false;
     }
 
-    private ResultList<RelatedTopic> getMoodleCoursesByUser(Topic user) {
-        return user.getRelatedTopics(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
-                DEFAULT_ROLE_TYPE_URI, MOODLE_COURSE_URI, 0);
-    }
-
-    private String getMoodleSecurityKeyWithoutAuthCheck(Topic userAccount) {
-        if (userAccount.hasProperty(MOODLE_SECURITY_KEY_URI)) {
-            String token = (String) userAccount.getProperty(MOODLE_SECURITY_KEY_URI);
-            return token;
+    
+    
+    // --
+    // --- Workspace Assignments & ACL Fixes
+    // --
+    
+    private void assignToMoodleWorkspace(Topic topic) {
+        if (hasAnyWorkspace(topic)) {
+            logger.warning("NOT assigning to Moodle Workspace since topic HAS some assigned already ..");
+            return;
         }
-        return null;
+        Topic moodleWorkspace = dms.getTopic("uri", new SimpleValue(WS_MOODLE_URI));
+        dms.createAssociation(new AssociationModel(AGGREGATION_TYPE_URI,
+            new TopicRoleModel(topic.getId(), PARENT_ROLE_TYPE_URI),
+            new TopicRoleModel(moodleWorkspace.getId(),CHILD_ROLE_TYPE_URI)
+        ));
+    }
+    
+    private boolean hasAnyWorkspace(Topic topic) {
+        return topic.getRelatedTopics(AGGREGATION_TYPE_URI, PARENT_ROLE_TYPE_URI, CHILD_ROLE_TYPE_URI,
+            "dm4.workspaces.workspace", 0).getSize() > 0;
     }
 
-    private boolean hasParticipantEdge (Topic course, Topic user) {
-        boolean value = false;
-        Topic userAccount = course.getRelatedTopic(MOODLE_PARTICIPANT_EDGE, DEFAULT_ROLE_TYPE_URI,
-                DEFAULT_ROLE_TYPE_URI, USER_ACCOUNT_TYPE_URI);
-        if (userAccount != null && user.getId() == userAccount.getId()) return value = true;
-        return value;
+    private boolean associationExists(String edge_type, Topic item, Topic user) {
+        List<Association> results = dms.getAssociations(item.getId(), user.getId(), edge_type);
+        return (results.size() > 0);
     }
-
-    private boolean hasAggregatingCourseParentEdge (Topic child, Topic parent) {
-        boolean value = false;
-        if (child == null) return true;
-        Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
-                PARENT_ROLE_TYPE_URI, MOODLE_COURSE_URI);
-        if (topic != null && parent.getId() == topic.getId()) return value = true;
-        return value;
-    }
-
-    private boolean hasAggregatingSectionParentEdge (Topic child, Topic parent) {
-        boolean value = false;
-        if (child == null) return true;
-        Topic topic = child.getRelatedTopic(AGGREGATION_TYPE_URI, CHILD_ROLE_TYPE_URI,
-                PARENT_ROLE_TYPE_URI, MOODLE_SECTION_URI);
-        if (topic != null && parent.getId() == topic.getId()) return value = true;
-        return value;
-    }
-
-    private Topic getMoodleCourseTopic(long courseId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_COURSE_URI_PREFIX + courseId));
-    }
-
-    private Topic getMoodleSectionTopic(long sectionId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_SECTION_URI_PREFIX + sectionId));
-    }
-
-    private Topic getMoodleItemTopic(long itemId) {
-        return dms.getTopic("uri", new SimpleValue(ISIS_ITEM_URI_PREFIX + itemId));
-    }
-
-    // === ACL Fix ===
-
+    
     private DeepaMehtaObject setDefaultMoodleGroupACLEntries(DeepaMehtaObject item) {
         // Let's repair broken/missing ACL-Entries
         ACLEntry writeList = new ACLEntry(Operation.WRITE, UserRole.MEMBER, UserRole.CREATOR, UserRole.OWNER);
@@ -1042,56 +1070,6 @@ public class MoodleServiceClient extends PluginActivator implements PostLoginUse
         aclService.setCreator(item, USERNAME_OF_SETTINGS_ADMINISTRATOR);
         aclService.setOwner(item, USERNAME_OF_SETTINGS_ADMINISTRATOR);
         return item;
-    }
-
-    // === Workspace Assignments ===
-
-    private void assignToMoodleWorkspace(Topic topic) {
-        if (hasAnyWorkspace(topic)) {
-            logger.warning("NOT assigning to Moodle Workspace since topic HAS some assigned already ..");
-            return;
-        }
-        Topic moodleWorkspace = dms.getTopic("uri", new SimpleValue(WS_MOODLE_URI));
-        dms.createAssociation(new AssociationModel(AGGREGATION_TYPE_URI,
-            new TopicRoleModel(topic.getId(), PARENT_ROLE_TYPE_URI),
-            new TopicRoleModel(moodleWorkspace.getId(),CHILD_ROLE_TYPE_URI)
-        ));
-    }
-
-    private boolean hasAnyWorkspace(Topic topic) {
-        return topic.getRelatedTopics(AGGREGATION_TYPE_URI, PARENT_ROLE_TYPE_URI, CHILD_ROLE_TYPE_URI,
-            "dm4.workspaces.workspace", 0).getSize() > 0;
-    }
-
-    /** 
-     * This methods assigns the "admin" Username Topic as the "Creator" of all imported moodle items.
-     * The dm4-notes-gui introduced (and relies) on a "Creator"- and "Contributor"-Edges to representing 
-     * users who created or edited a specific resource. 
-     * 
-     */
-    private Association assignDefaultAuthorship(Topic item) {
-        try {
-            // 0) Check if eduzen-tagging-notes plugin is available
-            dms.getPlugin(PLUGIN_URI_TAGGING_NOTES); // ### clear why 
-            // 1) If eduzen-tagging-nodes plugin is available
-            Topic authorUsername = dms.getTopic("dm4.accesscontrol.username",
-                    new SimpleValue(USERNAME_OF_SETTINGS_ADMINISTRATOR));
-            // org.deepamehta.tagging-resources - Constants
-            String CREATOR_EDGE_URI = "org.deepamehta.resources.creator_edge";
-            // String CONTRIBUTOR_EDGE_URI = "org.deepamehta.resources.contributor_edge";
-            if (associationExists(CREATOR_EDGE_URI, item, authorUsername)) return null;
-            return dms.createAssociation(new AssociationModel(CREATOR_EDGE_URI,
-                    new TopicRoleModel(item.getId(), PARENT_URI),
-                    new TopicRoleModel(authorUsername.getId(), CHILD_URI)));
-        } catch (RuntimeException e) {
-            logger.fine("MoodleWebServiceClient assigns no \"Tagging Notes\" (Plugin) Default Authorship");
-            return null;
-        }
-    }
-
-    private boolean associationExists(String edge_type, Topic item, Topic user) {
-        List<Association> results = dms.getAssociations(item.getId(), user.getId(), edge_type);
-        return (results.size() > 0);
     }
 
 }
